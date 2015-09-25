@@ -1,5 +1,6 @@
 #include <EEPROM.h>
 #include <Stepper.h>
+
 #define CAUDAL 1
 
 #define PIN_V0 4 // PIN VALVULA 0
@@ -11,7 +12,8 @@
 #define PIN_V6 0
 #define PIN_V7 0
 
-#define V0_EEPROM 10 // guardo las sucesivas en los espcios siguientes.
+#define V0_EEPROM_b 10 // codigo de bebidas
+#define V0_EEPROM_a 20 // estado de las valvulas
 
 #define STP1  9 // PINES DEL MOTOR PAP
 #define STP2 10
@@ -81,14 +83,14 @@ void serialEvent(){
 
 void setUpValve (int index, int drinkCode){
   valve[index].active = 1;
-  EEPROM.update(3*V0_EEPROM + index, 1);
+  EEPROM.update(V0_EEPROM_a + index, 1);
   valve[index].drink = drinkCode;
-  EEPROM.update(V0_EEPROM + index, drinkCode);  
+  EEPROM.update(V0_EEPROM_b + index, drinkCode);  
 }
 
 void closeValve (int index){
   valve[index].active = 0;
-  EEPROM.update(3*V0_EEPROM + index, 0);
+  EEPROM.update(V0_EEPROM_a + index, 0);
 }
 
 void parse(String str) {
@@ -110,9 +112,9 @@ void parse(String str) {
 void readEEPROM(){
   int i;
   for (i = 0; i < NUM_VALVES; i++){
-    valve[i].active = EEPROM.read(3*V0_EEPROM+i);
+    valve[i].active = EEPROM.read(V0_EEPROM_a +i);
     if (valve[i].active) {
-      valve[i].drink = EEPROM.read(V0_EEPROM + i);
+      valve[i].drink = EEPROM.read(V0_EEPROM_b + i);
     }
   }
 }
@@ -135,6 +137,20 @@ void cmdToAction(String arg[],int numArg){
       make(drinkArray, numArg -2);
     } else {
       delay(1); 
+    }
+  }
+
+  if (arg[0]== "SET"){ // SET index cod_bebida
+    if (arg[1].toInt()>=0 && arg[1].toInt()<=7){
+      setUpValve(arg[1].toInt(), arg[2].toInt()); //TODO: validar el codigo de bebidas.
+    }
+  }
+
+  if (arg[0]== "CLOSE"){ // SET index cod_bebida
+    if (arg[1].toInt()>=0 && arg[1].toInt()<=7){
+      if (valve[arg[1].toInt()].active){
+        closeValve(arg[1].toInt());
+      }        
     }
   }
 
