@@ -1,5 +1,6 @@
 #include <EEPROM.h>
 #include <Stepper.h>
+#define DEBUG
 
 #define CAUDAL 1
 
@@ -74,6 +75,9 @@ void serialEvent(){
       if (inputChar != '\n'){
         bufferString += inputChar;
       } else {
+        #ifdef DEBUG
+          Serial.println(bufferString);
+        #endif
         parse(bufferString);
         bufferString = "";
       }
@@ -85,12 +89,18 @@ void setUpValve (int index, int drinkCode){
   valve[index].active = 1;
   EEPROM.update(V0_EEPROM_a + index, 1);
   valve[index].drink = drinkCode;
-  EEPROM.update(V0_EEPROM_b + index, drinkCode);  
+  EEPROM.update(V0_EEPROM_b + index, drinkCode);
+  #ifdef DEBUG
+    Serial.println("VALVE "+String(index)+" SET TO DRINK "+String(drinkCode));
+  #endif
 }
 
 void closeValve (int index){
   valve[index].active = 0;
   EEPROM.update(V0_EEPROM_a + index, 0);
+  #ifdef DEBUG
+    Serial.println("VALVE "+String(index)+" NO LONGER AVAILABLE");
+  #endif
 }
 
 void parse(String str) {
@@ -111,10 +121,16 @@ void parse(String str) {
 
 void readEEPROM(){
   int i;
+  #ifdef DEBUG
+    Serial.println("READING VALVE DATA FROM EEPROM.");
+  #endif
   for (i = 0; i < NUM_VALVES; i++){
     valve[i].active = EEPROM.read(V0_EEPROM_a +i);
     if (valve[i].active) {
       valve[i].drink = EEPROM.read(V0_EEPROM_b + i);
+      #ifdef DEBUG
+        Serial.println("VALVE "+ String(i)+" ACTIVE WITH DRINK "+ String(valve[i].drink));
+      #endif
     }
   }
 }
@@ -122,18 +138,21 @@ void readEEPROM(){
 void cmdToAction(String arg[],int numArg){
   int drinkArray [numArg-1][2];
   arg[0].toUpperCase();
+  #ifdef DEBUG
+    Serial.println("COMMAND: "+arg[0]);
+  #endif
   
   
   //EJEMPLO DE BEBIDAS PERSONALIZADAS
   if (arg[0] == "MAKE"){ // MAKE volumen_del_vaso cod_bebida;porcentaje cod_bebida;porcentaje ...
-    int volumen = round(arg[1].toInt() * 0.8); //multiplico por 0.8 para darme un poco de juego
+    int vol = round(arg[1].toInt() * 0.8); //multiplico por 0.8 para darme un poco de juego
     
     for (int i = 2; i <= numArg; i++) {        
       drinkArray[i-2][0] = arg[1].toInt(); //TODO: decidir si le paso las bebidas como numero o como string
-      drinkArray[i-2][1] = floor(arg[2].toInt() * volumen / 100.0); //redondeo para abajo para asegurarme de que no me paso del volumen total 
+      drinkArray[i-2][1] = floor(arg[2].toInt() * vol / 100.0); //redondeo para abajo para asegurarme de que no me paso del volumen total 
     }
        
-    if (validateInput(volumen, drinkArray,numArg-2)) {
+    if (validateInput(vol, drinkArray,numArg-2)) {
       make(drinkArray, numArg -2);
     } else {
       delay(1); 
@@ -182,6 +201,10 @@ boolean validateInput(int v,int d[][2], int dim){
     porcentajeSum += d[i][1]; //TODO: validar los codigos de bebidas
   }
 
+  #ifdef DEBUG
+    Serial.println("VALIDATION "+(porcentajeSum <= v)?"OK":"NOT OK");
+  #endif
+  
   return (porcentajeSum <= v);  
 }
 
@@ -189,10 +212,18 @@ void pour(int pin, int cant) {
   long t;
   
   t = round((float)cant/CAUDAL); //TODO: ver tema de unidades.
-
+  
+  #ifdef DEBUG
+    Serial.println(" OPEN VALVE ON PIN "+String(pin)+" FOR "+String(t)+" MILLIS");
+  #endif
+  
   digitalWrite(pin, HIGH);
   delay(t);
-  digitalWrite(pin, LOW);  
+  digitalWrite(pin, LOW);
+  
+  #ifdef DEBUG
+    Serial.println("VALVE ON PIN "+String(pin)+" CLOSED");
+  #endif
 }
 
 byte getValveIndexFromDrink(int d){
@@ -223,19 +254,31 @@ void make(int d[][2], int dim){
 }
 
 long distanceToSteps(long pos) {
+  #ifdef DEBUG
+    Serial.println("DISTANCE: "+String(pos)+" -> STEPS: "+String(round(pos/POS_POR_PASO)));
+  #endif
   return round(pos/POS_POR_PASO);
 }
 
 void goTo(long pos){
+  #ifdef DEBUG
+    Serial.println("GOING TO POS "+String(pos));
+  #endif
   stepper.step(distanceToSteps(currentPos - pos)); // diferencia entre la posición actual y la de destino.
   currentPos = pos;                                // hay que configurar los cables del stepper para que step(1) valla hacia afuera
                                                    // y step(-1) valla hacia adentro.
 }
 
 void goHome(){
+  #ifdef DEBUG
+    Serial.println("GOING HOME, WAIT FOR LIMIT SWITCH");
+  #endif
   while (digitalRead(PIN_FDC) == LOW){
     stepper.step(-1);
   }
   currentPos = 0;
+  #ifdef DEBUG
+    Serial.println("HOME OK");
+  #endif
 }
 
