@@ -2,7 +2,7 @@
 #include <Stepper.h>
 #define DEBUG
 
-#define CAUDAL 1
+#define CAUDAL 1 // cm^3/miliseg?
 
 #define PIN_V0 4 // PIN VALVULA 0
 #define PIN_V1 5
@@ -12,6 +12,15 @@
 #define PIN_V5 0
 #define PIN_V6 0
 #define PIN_V7 0
+
+#define POS_V0 100
+#define POS_V1 200
+#define POS_V2 300
+#define POS_V3 400
+#define POS_V4 500
+#define POS_V5 600
+#define POS_V6 700
+#define POS_V7 800
 
 #define V0_EEPROM_b 10 // codigo de bebidas
 #define V0_EEPROM_a 20 // estado de las valvulas
@@ -24,7 +33,7 @@
 #define NUM_VALVES 8
 
 #define PIN_FDC 2 //NORMAL ABIERTO DEL FINAL DE CARRERA DEL HOME
-#define POS_POR_PASO 1.0 //TODO: ver que pongo aca
+#define POS_POR_PASO 0.1 //TODO: ver que pongo aca
 
 String bebidas_s[] = {"FERNET", "VODKA","RON", "TEQUILA", "COCA COLA", "NARANJA"};
 enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA};
@@ -47,29 +56,19 @@ String bufferString = "";
 long currentPos = 0;
 
 void setup() {
-  // put your setup code here, to run once:
   Serial.begin(9600);
   stepper.setSpeed(100);
-  readEEPROM();
-  pinSetup();
-    
-
-  valve[0].pos=10;
-  valve[1].pos=20;
-  valve[2].pos=30;
-  valve[3].pos=40;
-  valve[4].pos=50;
-  valve[5].pos=60;
-  valve[6].pos=70;
-  valve[7].pos=80;
   
-  goHome(); // hago que el motor valla a home.
+  pinSetup();
+  posSetup();
+  readEEPROM();  
+  
+  goHome();
 
   Serial.println("BARDUINO IS READY");
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
   serialEvent();
 }
 
@@ -81,6 +80,17 @@ void firstTimeSetUp(){
     valve[i].active = 0;
     EEPROM.update(V0_EEPROM_a + i, 0);
   }
+}
+
+void posSetup(){
+  valve[0].pos = POS_V0;
+  valve[1].pos = POS_V1;
+  valve[2].pos = POS_V2;
+  valve[3].pos = POS_V3;
+  valve[4].pos = POS_V4;
+  valve[5].pos = POS_V5;
+  valve[6].pos = POS_V6;
+  valve[7].pos = POS_V7;
 }
 
 void pinSetup(){
