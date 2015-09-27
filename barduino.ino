@@ -22,8 +22,8 @@
 #define POS_V6 700
 #define POS_V7 800
 
-#define V0_EEPROM_b 10 // codigo de bebidas
-#define V0_EEPROM_a 20 // estado de las valvulas
+#define V0_EEPROM 10 // estado de las valvulas
+                     // la bebida de c/ valvula se guarda en V0_EEPROM+NUM_VALVES
 
 #define STP1  9 // PINES DEL MOTOR PAP
 #define STP2 10
@@ -74,11 +74,11 @@ void loop() {
 
 void firstTimeSetUp(){
   int i;
-  EEPROM.write(199, 0);
+  EEPROM.write(254, 0);
   Serial.println("PERFORMING FIRST TIME SET UP");
   for (i = 0; i < NUM_VALVES; i++){
     valve[i].active = 0;
-    EEPROM.update(V0_EEPROM_a + i, 0);
+    EEPROM.update(V0_EEPROM + i, 0);
   }
 }
 
@@ -138,9 +138,9 @@ void serialEvent(){
 
 void setUpValve (int index, int drinkCode){
   valve[index].active = 1;
-  EEPROM.update(V0_EEPROM_a + index, 1);
+  EEPROM.update(V0_EEPROM + index, 1);
   valve[index].drink = drinkCode;
-  EEPROM.update(V0_EEPROM_b + index, drinkCode);
+  EEPROM.update(V0_EEPROM + NUM_VALVES + index, drinkCode);
   #ifdef DEBUG
     Serial.println("VALVE "+String(index)+" SET TO DRINK "+String(drinkCode));
   #endif
@@ -148,7 +148,7 @@ void setUpValve (int index, int drinkCode){
 
 void closeValve (int index){
   valve[index].active = 0;
-  EEPROM.update(V0_EEPROM_a + index, 0);
+  EEPROM.update(V0_EEPROM + index, 0);
   #ifdef DEBUG
     Serial.println("VALVE "+String(index)+" NO LONGER AVAILABLE");
   #endif
@@ -176,13 +176,13 @@ void readEEPROM(){
     Serial.println("READING VALVE DATA FROM EEPROM.");
   //#endif
 
-  if (EEPROM.read(199)==255) {
+  if (EEPROM.read(254)==255) {
     firstTimeSetUp();
   } else {
     for (i = 0; i < NUM_VALVES; i++){
-      valve[i].active = EEPROM.read(V0_EEPROM_a +i);
+      valve[i].active = EEPROM.read(V0_EEPROM +i);
       if (valve[i].active) {
-        valve[i].drink = EEPROM.read(V0_EEPROM_b + i);
+        valve[i].drink = EEPROM.read(V0_EEPROM + NUM_VALVES + i);
         #ifdef DEBUG
           Serial.println("VALVE "+ String(i)+" ACTIVE WITH DRINK "+ String(valve[i].drink));
         #endif
