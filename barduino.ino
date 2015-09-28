@@ -1,6 +1,6 @@
 #include <EEPROM.h>
 #include <Stepper.h>
-#define DEBUG
+//#define DEBUG
 
 #define CAUDAL 1 // cm^3/miliseg?
 
@@ -31,12 +31,13 @@
 #define STP4 12
 
 #define NUM_VALVES 8
+#define NUM_DRINKS 8
 
 #define PIN_FDC 2 //NORMAL ABIERTO DEL FINAL DE CARRERA DEL HOME
 #define POS_POR_PASO 0.1 //TODO: ver que pongo aca
 
-String bebidas_s[] = {"FERNET", "VODKA","RON", "TEQUILA", "COCA COLA", "NARANJA"};
-enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA};
+String bebidas_s[NUM_DRINKS] = {"FERNET", "VODKA","RON", "TEQUILA", "COCA COLA", "NARANJA", "GANCIA", "SPRITE"}; // ESTO Y LO DE ABAJO DEBERIAN SER IGUALES
+enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA, GANCIA, SPRITE}; //todavia no se para q usar esto <<<<
 
 typedef struct valve_s {
     byte index;
@@ -154,9 +155,19 @@ void closeValve (int index){
   #endif
 }
 
+int stringOcurr(String str, char subS){
+  int i,  last=0, c=0;
+  while (str.indexOf(subS, last) != -1){
+    c++;
+    last = str.indexOf(subS, last);
+  }
+  return c;
+}
+
 void parse(String str) {
   int i;
-  String arg[10] = {"","","","","","","","","",""};
+  int argCount = stringOcurr(str, sepChar)+1; //busco la cantidad de espacios para no definir arg[] grande al pedo  
+  String arg[argCount];
   int numArg = 0;
 
   for (i = 0; i<str.length(); i++){
@@ -167,7 +178,7 @@ void parse(String str) {
     }
   }
 
-  cmdToAction(arg, numArg);  
+  cmdToAction(arg, numArg);
 }
 
 void readEEPROM(){
@@ -176,7 +187,7 @@ void readEEPROM(){
     Serial.println("READING VALVE DATA FROM EEPROM.");
   //#endif
 
-  if (EEPROM.read(254)==255) {
+  if (EEPROM.read(254)==255) { 
     firstTimeSetUp();
   } else {
     for (i = 0; i < NUM_VALVES; i++){
@@ -192,8 +203,7 @@ void readEEPROM(){
     
 }
 
-void cmdToAction(String arg[],int numArg){
-  int drinkArray [numArg-1][2];
+void cmdToAction(String arg[],int numArg){  
   arg[0].toUpperCase();
   #ifdef DEBUG
     Serial.println("COMMAND: "+arg[0]);
@@ -203,12 +213,12 @@ void cmdToAction(String arg[],int numArg){
   //EJEMPLO DE BEBIDAS PERSONALIZADAS
   if (arg[0] == "MAKE"){ // MAKE volumen_del_vaso cod_bebida;porcentaje cod_bebida;porcentaje ...
     if (numArg > 1){
+      int drinkArray [numArg-1][2];
       int vol = round(arg[1].toInt() * 0.8); //multiplico por 0.8 para darme un poco de juego
       int sepPos;
       #ifdef DEBUG
         Serial.println("numARG = "+String(numArg)+ ". BEBIDAS = "+String(numArg-1));
-      #endif
-  
+      #endif  
       
       for (int i = 2; i <= numArg; i++) {
         sepPos = arg[i].indexOf(subSepChar);
@@ -235,14 +245,20 @@ void cmdToAction(String arg[],int numArg){
       Serial.println("VALVE DOES NOT EXIST!");  
     }
   } else if (arg[0]== "CLOSE"){ // SET index cod_bebida
-    if (arg[1].toInt()>=0 && arg[1].toInt()<NUM_VALVES){
-      if (valve[arg[1].toInt()].active){
-        closeValve(arg[1].toInt());
-      } else {
-        Serial.println("VALVE AREADY CLOSED");
+    if (numArg >= 1) {
+      for (int i = 1; i <= numArg; i++){
+        if (arg[i].toInt()>=0 && arg[i].toInt()<NUM_VALVES){
+          if (valve[arg[i].toInt()].active){
+            closeValve(arg[i].toInt());
+          } else {
+            Serial.println("VALVE AREADY CLOSED");
+          }
+        } else {
+          Serial.println("VALVE DOES NOT EXIST!");  
+        }
       }
-    } else {
-      Serial.println("VALVE DOES NOT EXIST!");  
+    } else if (numArg = 0) {
+      Serial.println("NOT ENOUGH ARGUMENTS");
     }
   } else if (arg[0]== "STATUS"){ // STATUS index 
     if (arg[1].toInt()>=0 && arg[1].toInt()<NUM_VALVES){
@@ -256,7 +272,11 @@ void cmdToAction(String arg[],int numArg){
     }
   } else if (arg[0]=="HOME"){
     goHome();
-  }else {
+  } else if (arg[0]=="CODES"){
+    for (int i = 0; i<NUM_DRINKS; i++){
+      Serial.println(bebidas_s[i] + ": " + String(i));
+    }
+  } else {
     Serial.println("COMMAND NOT FOUND");
   }
 
