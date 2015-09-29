@@ -365,7 +365,7 @@ int getValveIndexFromDrink(int d){
 
 void make(int d[][2], int dim){
   int i, v_i;
-  if (currentPos) {
+  if (currentPos != 0) {
     #ifdef DEBUG 
       Serial.println("NOT AT HOME WHEN MAKE()");
     #endif
