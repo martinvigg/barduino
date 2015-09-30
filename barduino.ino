@@ -1,8 +1,8 @@
 #include <EEPROM.h>
 #include <Stepper.h>
-//#define DEBUG
+#define DEBUG
 
-#define CAUDAL 1 // cm^3/miliseg?
+#define CAUDAL 0.01 // cm^3/miliseg?
 
 #define PIN_V0 4 // PIN VALVULA 0
 #define PIN_V1 5
@@ -128,7 +128,7 @@ void serialEvent(){
         bufferString += inputChar;
       } else {
         #ifdef DEBUG
-          //Serial.println(bufferString);
+          Serial.println(bufferString);
         #endif
         parse(bufferString);
         bufferString = "";
@@ -160,6 +160,7 @@ int stringOcurr(String str, char subS){
   while (str.indexOf(subS, last) != -1){
     c++;
     last = str.indexOf(subS, last);
+    last++;
   }
   return c;
 }
@@ -167,7 +168,7 @@ int stringOcurr(String str, char subS){
 void parse(String str) {
   int i;
   int argCount = stringOcurr(str, sepChar)+1; //busco la cantidad de espacios para no definir arg[] grande al pedo  
-  String arg[argCount];
+  String arg[argCount]; // make 500 1;50 2;50
   int numArg = 0;
 
   for (i = 0; i<str.length(); i++){
@@ -175,10 +176,11 @@ void parse(String str) {
       arg[numArg] += str[i];
     } else {
       numArg++;
+      //Serial.println(numArg);
     }
   }
-
-  cmdToAction(arg, numArg);
+  //Serial.println("parse");
+  cmdToAction(arg, argCount);
 }
 
 void readEEPROM(){
@@ -212,15 +214,15 @@ void cmdToAction(String arg[],int numArg){
   
   //EJEMPLO DE BEBIDAS PERSONALIZADAS
   if (arg[0] == "MAKE"){ // MAKE volumen_del_vaso cod_bebida;porcentaje cod_bebida;porcentaje ...
-    if (numArg > 1){
-      int drinkArray [numArg-1][2];
+    if (numArg > 2){
+      int drinkArray [numArg-2][2];
       int vol = round(arg[1].toInt() * 0.8); //multiplico por 0.8 para darme un poco de juego
       int sepPos;
       #ifdef DEBUG
         Serial.println("numARG = "+String(numArg)+ ". BEBIDAS = "+String(numArg-1));
       #endif  
       
-      for (int i = 2; i <= numArg; i++) {
+      for (int i = 2; i < numArg; i++) {
         sepPos = arg[i].indexOf(subSepChar);
         drinkArray[i-2][0] = arg[i].substring(0,sepPos).toInt(); //TODO: decidir si le paso las bebidas como numero o como string
         drinkArray[i-2][1] = floor(arg[i].substring(sepPos+1).toInt() * (vol / 100.0)); //redondeo para abajo para asegurarme de que no me paso del volumen total 
@@ -230,8 +232,8 @@ void cmdToAction(String arg[],int numArg){
         #endif 
       } 
          
-      if (validateInput(vol, drinkArray,numArg-1)) {
-        make(drinkArray, numArg -1);
+      if (validateInput(vol, drinkArray,numArg-2)) {
+        make(drinkArray, numArg -2);
       } else {
         Serial.println("COMPOSITION ERROR");
       }
@@ -245,8 +247,8 @@ void cmdToAction(String arg[],int numArg){
       Serial.println("VALVE DOES NOT EXIST!");  
     }
   } else if (arg[0]== "CLOSE"){ // SET index cod_bebida
-    if (numArg >= 1) {
-      for (int i = 1; i <= numArg; i++){
+    if (numArg >= 2) {
+      for (int i = 1; i < numArg; i++){
         if (arg[i].toInt()>=0 && arg[i].toInt()<NUM_VALVES){
           if (valve[arg[i].toInt()].active){
             closeValve(arg[i].toInt());
@@ -257,7 +259,7 @@ void cmdToAction(String arg[],int numArg){
           Serial.println("VALVE DOES NOT EXIST!");  
         }
       }
-    } else if (numArg = 0) {
+    } else {
       Serial.println("NOT ENOUGH ARGUMENTS");
     }
   } else if (arg[0]== "STATUS"){ // STATUS index 
