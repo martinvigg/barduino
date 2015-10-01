@@ -30,6 +30,7 @@
 #define STP2 10
 #define STP3 11
 #define STP4 12
+#define STP_SPEED 75
 
 #define NUM_VALVES 8
 #define NUM_DRINKS 8
@@ -59,7 +60,7 @@ long currentPos = 0;
 
 void setup() {
   Serial.begin(9600);
-  stepper.setSpeed(100);
+  stepper.setSpeed(STP_SPEED);
   
   pinSetup();
   posSetup();
@@ -246,6 +247,27 @@ void cmdToAction(String arg[],int numArg){
       setUpValve(arg[1].toInt(), arg[2].toInt()); //TODO: validar el codigo de bebidas.
     } else {
       Serial.println("VALVE DOES NOT EXIST!");  
+    }
+  } else if (arg[0]== "SPEED"){ // SET index cod_bebida
+    if (numArg = 2) {
+      if (arg[1].toInt() <= 100) {
+        stepper.setSpeed(arg[1].toInt());
+        //#ifdef DEBUG
+          Serial.println("SET SPEED TO: "+String(arg[1].toInt()));
+        //#endif
+      } else {
+        Serial.println("SPEED MUST BE LOWER THAN 100");
+      }
+      
+    } else {
+      Serial.println("NOT ENOUGH ARGUMENTS");
+    }
+  } else if (arg[0]== "STEP"){ // SET index cod_bebida
+    if (numArg = 2) {
+      Serial.println("DOING "+ String(arg[1].toInt())+" STEPS");
+      stepper.step(arg[1].toInt());
+    } else {
+      Serial.println("NOT ENOUGH ARGUMENTS");
     }
   } else if (arg[0]== "CLOSE"){ // SET index cod_bebida
     if (numArg >= 2) {
