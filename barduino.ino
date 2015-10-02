@@ -36,7 +36,7 @@
 #define STP_MAX 200
 #define STP_MIN 10
 #define STP_DEFAULTSPEED 75
-#define STP_HOMESPEED 30
+#define STP_HOMESPEED 25
 #define STP_STEPS 200
 
 #define NUM_VALVES 8
@@ -68,6 +68,7 @@ long currentPos = 0;
 void setup() {
   Serial.begin(9600);
   stepper.setSpeed(STP_DEFAULTSPEED);
+  
   
   pinSetup();
   posSetup();
@@ -483,6 +484,7 @@ void goToA(long pos){
 }
 
 void goToSmooth(long pos){
+  //Serial.println(pos);
   long steps = distanceToSteps(pos - currentPos);
   int dir = (steps >= 0)?1:-1;
   int stepGap;
@@ -492,7 +494,7 @@ void goToSmooth(long pos){
   long stepsdone=0;
   
   steps = dir*steps; // valor absoluto
-  N = floor(steps*0.1);  
+  N = floor(steps*0.05);  
   stepGap=floor(N*0.025);
   if (!stepGap) stepGap = 1;
   #ifdef DEBUG
