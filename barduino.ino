@@ -31,6 +31,7 @@
 #define STP3 11
 #define STP4 12
 #define STP_SPEED 75
+#define STP_STEPS 400
 
 #define NUM_VALVES 8
 #define NUM_DRINKS 8
@@ -51,7 +52,7 @@ typedef struct valve_s {
 
 valve_t valve[NUM_VALVES];
 
-Stepper stepper(400, STP1, STP2, STP3, STP4);
+Stepper stepper(STP_STEPS, STP1, STP2, STP3, STP4);
 
 char sepChar = ' ';
 char subSepChar = ';';
