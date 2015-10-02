@@ -3,6 +3,9 @@
 
 #define DEBUG
 #define ACCEL
+#define SMOOTH
+
+#define SMOOTHSTEP(x) ((x) * (x) * (3 - 2 * (x))) // <<
 
 #define CAUDAL 0.01 // cm^3/miliseg?
 
@@ -269,8 +272,8 @@ void cmdToAction(String arg[],int numArg){
     }
   } else if (arg[0]== "STEP"){ // SET index cod_bebida
     if (numArg = 2) {
-      Serial.println("DOING "+ String(arg[1].toInt())+" STEPS");
-      stepper.step(arg[1].toInt());
+      Serial.println("DOING "+ String(arg[1].toInt())+" STEPS");      
+        stepper.step(arg[1].toInt());        
     } else {
       Serial.println("NOT ENOUGH ARGUMENTS");
     }
@@ -302,6 +305,12 @@ void cmdToAction(String arg[],int numArg){
     }
   } else if (arg[0]=="HOME"){
     goHome();
+  } else if (arg[0]=="GOTO"){
+    #ifdef ACCEL
+      goToSmooth(arg[1].toInt());
+    #else
+      goTo(arg[1].toInt());
+    #endif       
   } else if (arg[0]=="CODES"){
     for (int i = 0; i<NUM_DRINKS; i++){
       Serial.println(bebidas_s[i] + ": " + String(i));
@@ -408,7 +417,7 @@ void make(int d[][2], int dim){
         Serial.println("getValveFromDrink RETURNS "+ String(v_i));
       #endif
       #ifdef ACCEL
-        goToA(valve[v_i].pos);
+        goToSmooth(valve[v_i].pos);
       #else
         goTo(valve[v_i].pos);
       #endif
@@ -472,6 +481,45 @@ void goToA(long pos){
     }
   }
   currentPos = pos;
+}
+
+void goToSmooth(long pos){
+  long steps = distanceToSteps(pos - currentPos);
+  int dir = (steps >= 0)?1:-1;
+  int stepGap;
+  int i;
+  int N;
+  float v,x,vmax;
+  
+  steps = dir*steps; // valor absoluto
+  N = floor(steps*0.25);  
+  stepGap=floor(steps*0.05); // me muevo de a 5% VER QUE VALOR TOMO
+  
+
+  for (i = 0; i < N; i+=stepGap)
+  {
+    v = (float)i / N;
+    v=SMOOTHSTEP(v);
+      x = (STP_MAX * v) + (STP_MIN * (1 - v)); //VELOCIDAD INICAL != 0
+      stepper.setSpeed(x);
+      //x=100*v;
+      //printf("Doy %d steps a %.2f velocidad.\n", 1,x);
+      stepper.step(dir*stepGap);
+  }
+
+    //printf("Doy %d steps a %.2f velocidad.\n", 50,x);
+  stepper.step(steps-2*N/stepGap+2*N%stepGap);
+  
+  vmax = x; //arranco a desacelerar desde la velocidad a la que iba.
+  
+  for (i = 0; i < N; i++)
+  {
+    v = 1.0*i/N;
+    v = SMOOTHSTEP(v);
+    x = (1 * v) + (vmax * (1 - v));
+    stepper.setSpeed(x);
+    stepper.step(dir*stepGap);
+  }
 }
 
 
