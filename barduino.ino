@@ -3,7 +3,6 @@
 
 #define DEBUG
 #define ACCEL
-#define SMOOTH
 
 #define SMOOTHSTEP(x) ((x) * (x) * (3 - 2 * (x))) // <<
 
@@ -34,11 +33,11 @@
 #define STP2 10
 #define STP3 11
 #define STP4 12
-#define STP_MAX 100
+#define STP_MAX 200
 #define STP_MIN 10
 #define STP_DEFAULTSPEED 75
 #define STP_HOMESPEED 30
-#define STP_STEPS 400
+#define STP_STEPS 200
 
 #define NUM_VALVES 8
 #define NUM_DRINKS 8
@@ -425,7 +424,7 @@ void make(int d[][2], int dim){
   }
 
   //TODO: revolver bebida ;) ;)
-  
+  if (currentPos>10) goToSmooth(10);
   goHome(); 
   #ifdef DEBUG
     Serial.println("ENJOY YOUR DRINK!!");
@@ -490,36 +489,55 @@ void goToSmooth(long pos){
   int i;
   int N;
   float v,x,vmax;
+  long stepsdone=0;
   
   steps = dir*steps; // valor absoluto
-  N = floor(steps*0.25);  
-  stepGap=floor(steps*0.05); // me muevo de a 5% VER QUE VALOR TOMO
-  
+  N = floor(steps*0.1);  
+  stepGap=floor(N*0.025);
+  if (!stepGap) stepGap = 1;
+  #ifdef DEBUG
+    Serial.println("STEPS: "+String(steps)+"\nN: "+String(N)+"\nstepGap: "+String(stepGap));
+  #endif
 
   for (i = 0; i < N; i+=stepGap)
   {
     v = (float)i / N;
     v=SMOOTHSTEP(v);
-      x = (STP_MAX * v) + (STP_MIN * (1 - v)); //VELOCIDAD INICAL != 0
-      stepper.setSpeed(x);
-      //x=100*v;
-      //printf("Doy %d steps a %.2f velocidad.\n", 1,x);
+    x = (STP_MAX * v) + (STP_MIN * (1 - v)); //VELOCIDAD INICAL != 0
+    stepper.setSpeed(x);
+    Serial.println("VEL "+String(x));
+    if (i+stepGap<=N) {
       stepper.step(dir*stepGap);
+      stepsdone += stepGap;
+    } else {
+      stepper.step(dir*((i+stepGap)-N));
+      stepsdone += ((i+stepGap)-N);
+    }
   }
-
-    //printf("Doy %d steps a %.2f velocidad.\n", 50,x);
-  stepper.step(steps-2*N/stepGap+2*N%stepGap);
+  
+  Serial.println("VEL MAX= "+String(x));
+  stepper.step(dir*(steps-2*stepsdone));
+  stepsdone += steps-2*stepsdone;
   
   vmax = x; //arranco a desacelerar desde la velocidad a la que iba.
   
-  for (i = 0; i < N; i++)
+  for (i = 0; i < N; i+=stepGap)
   {
     v = 1.0*i/N;
     v = SMOOTHSTEP(v);
-    x = (1 * v) + (vmax * (1 - v));
+    x = (STP_MIN * v) + (vmax * (1 - v));
     stepper.setSpeed(x);
-    stepper.step(dir*stepGap);
+    Serial.println("VEL "+String(x));
+    if (i+stepGap<=N) {
+      stepper.step(dir*stepGap);
+      stepsdone += stepGap;
+    } else {
+      stepper.step(dir*((i+stepGap)-N));
+      stepsdone += ((i+stepGap)-N);
+    }
   }
+  Serial.println("VEL FINAL= "+String(x)+"\nSTEPSCOMPUTADOS: "+String(stepsdone));
+  currentPos=pos;
 }
 
 
