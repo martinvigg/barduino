@@ -2,6 +2,7 @@
 #include <Stepper.h>
 
 #define DEBUG
+#define ACCEL
 
 #define CAUDAL 0.01 // cm^3/miliseg?
 
@@ -30,7 +31,10 @@
 #define STP2 10
 #define STP3 11
 #define STP4 12
-#define STP_SPEED 75
+#define STP_MAX 100
+#define STP_MIN 10
+#define STP_DEFAULTSPEED 75
+#define STP_HOMESPEED 30
 #define STP_STEPS 400
 
 #define NUM_VALVES 8
@@ -61,7 +65,7 @@ long currentPos = 0;
 
 void setup() {
   Serial.begin(9600);
-  stepper.setSpeed(STP_SPEED);
+  stepper.setSpeed(STP_DEFAULTSPEED);
   
   pinSetup();
   posSetup();
@@ -251,7 +255,7 @@ void cmdToAction(String arg[],int numArg){
     }
   } else if (arg[0]== "SPEED"){ // SET index cod_bebida
     if (numArg = 2) {
-      if (arg[1].toInt() <= 100) {
+      if (arg[1].toInt() <= STP_MAX && arg[1].toInt() >= STP_MIN) {
         stepper.setSpeed(arg[1].toInt());
         //#ifdef DEBUG
           Serial.println("SET SPEED TO: "+String(arg[1].toInt()));
@@ -403,7 +407,11 @@ void make(int d[][2], int dim){
       #ifdef DEBUG 
         Serial.println("getValveFromDrink RETURNS "+ String(v_i));
       #endif
-      goTo(valve[v_i].pos);
+      #ifdef ACCEL
+        goToA(valve[v_i].pos);
+      #else
+        goTo(valve[v_i].pos);
+      #endif
       pour(valve[v_i].pin, d[i][1]);
   }
 
@@ -431,10 +439,48 @@ void goTo(long pos){
                                                    // y step(-1) valla hacia adentro.
 }
 
+void goToA(long pos){
+  long steps = distanceToSteps(pos - currentPos);
+  int dir = (steps >= 0)?1:-1;
+  int stepGap;
+  int i;
+  
+  float k;
+  float v;
+  float prev_v;
+  float halfsteps;
+  
+  steps = dir*steps; // valor absoluto
+  halfsteps=steps*0.5; // queda en decimal
+  stepGap=steps*0.05; // me muevo de a 5% VER QUE VALOR TOMO
+
+  for (i = 0; i < steps; i+= stepGap){
+    k=1.0*abs(halfsteps-i)/halfsteps; // indice posición respecto al medio
+    v = STP_MAX*(1-k); // ACA SE PUEDE MULTIPLICAR POR 0,ALGO PARA FRENAR UN PPOCO
+
+    if (v >= STP_MAX) v = STP_MAX; // me aseguro de no pasarme de las velocidades maximas y minimas
+    if (v<=STP_MIN) v = STP_MIN;
+    if (v != prev_v) { // no seteo dos veces la misma velocidad, hace todo mas fluido
+      stepper.setSpeed(v);
+      prev_v = v;
+    }
+
+    if (i+stepGap > steps) { //si voy a dar steps demas, compenso
+      stepper.step(dir*steps-i);
+    } else {
+      stepper.step(dir*stepGap);
+    }
+  }
+  currentPos = pos;
+}
+
+
 void goHome(){
   #ifdef DEBUG
     Serial.println("GOING HOME, WAITING FOR LIMIT SWITCH");
   #endif
+
+  stepper.setSpeed(STP_HOMESPEED);
   while (digitalRead(PIN_FDC) == LOW){
     stepper.step(-1);
   }
