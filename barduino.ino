@@ -4,7 +4,8 @@
 #define DEBUG
 #define ACCEL
 
-#define SMOOTHSTEP(x) ((x) * (x) * (3 - 2 * (x))) // <<
+#define SMOOTHSTEP(x) ((x) * (x) * (3 - 2 * (x))) // << SE PUEDE APLICAR VARIAS VECES SOBRE SI MISMA
+#define SMOOTHERSTEP(X) x*x*x*(x*(x*6 - 15) + 10) // << UN POCO MAS SUAVE QUE LA ANTERIOR
 
 #define CAUDAL 0.01 // cm^3/miliseg?
 
@@ -76,7 +77,7 @@ void setup() {
   
   goHome();
 
-  Serial.println("BARDUINO IS READY");
+  Serial.println(F("BARDUINO IS READY"));
 }
 
 void loop() {
@@ -86,7 +87,7 @@ void loop() {
 void firstTimeSetUp(){
   int i;
   EEPROM.write(254, 0);
-  Serial.println("PERFORMING FIRST TIME SET UP");
+  Serial.println(F("PERFORMING FIRST TIME SET UP"));
   for (i = 0; i < NUM_VALVES; i++){
     valve[i].active = 0;
     EEPROM.update(V0_EEPROM + i, 0);
@@ -196,7 +197,7 @@ void parse(String str) {
 void readEEPROM(){
   int i;
   //#ifdef DEBUG
-    Serial.println("READING VALVE DATA FROM EEPROM.");
+    Serial.println(F("READING VALVE DATA FROM EEPROM."));
   //#endif
 
   if (EEPROM.read(254)==255) { 
@@ -245,16 +246,16 @@ void cmdToAction(String arg[],int numArg){
       if (validateInput(vol, drinkArray,numArg-2)) {
         make(drinkArray, numArg -2);
       } else {
-        Serial.println("COMPOSITION ERROR");
+        Serial.println(F("COMPOSITION ERROR"));
       }
     } else {
-      Serial.println("NOT ENOUGH ARGUMENTS");
+      Serial.println(F("NOT ENOUGH ARGUMENTS"));
     }
   } else if (arg[0]== "SET"){ // SET index cod_bebida
     if (arg[1].toInt()>=0 && arg[1].toInt()<NUM_VALVES){
       setUpValve(arg[1].toInt(), arg[2].toInt()); //TODO: validar el codigo de bebidas.
     } else {
-      Serial.println("VALVE DOES NOT EXIST!");  
+      Serial.println(F("VALVE DOES NOT EXIST!"));  
     }
   } else if (arg[0]== "SPEED"){ // SET index cod_bebida
     if (numArg = 2) {
@@ -264,18 +265,18 @@ void cmdToAction(String arg[],int numArg){
           Serial.println("SET SPEED TO: "+String(arg[1].toInt()));
         //#endif
       } else {
-        Serial.println("SPEED MUST BE LOWER THAN 100");
+        Serial.println(F("SPEED MUST BE LOWER THAN 100"));
       }
       
     } else {
-      Serial.println("NOT ENOUGH ARGUMENTS");
+      Serial.println(F("NOT ENOUGH ARGUMENTS"));
     }
   } else if (arg[0]== "STEP"){ // SET index cod_bebida
     if (numArg = 2) {
       Serial.println("DOING "+ String(arg[1].toInt())+" STEPS");      
         stepper.step(arg[1].toInt());        
     } else {
-      Serial.println("NOT ENOUGH ARGUMENTS");
+      Serial.println(F("NOT ENOUGH ARGUMENTS"));
     }
   } else if (arg[0]== "CLOSE"){ // SET index cod_bebida
     if (numArg >= 2) {
@@ -284,14 +285,14 @@ void cmdToAction(String arg[],int numArg){
           if (valve[arg[i].toInt()].active){
             closeValve(arg[i].toInt());
           } else {
-            Serial.println("VALVE AREADY CLOSED");
+            Serial.println(F("VALVE AREADY CLOSED"));
           }
         } else {
-          Serial.println("VALVE DOES NOT EXIST!");  
+          Serial.println(F("VALVE DOES NOT EXIST!"));  
         }
       }
     } else {
-      Serial.println("NOT ENOUGH ARGUMENTS");
+      Serial.println(F("NOT ENOUGH ARGUMENTS"));
     }
   } else if (arg[0]== "STATUS"){ // STATUS index 
     if (arg[1].toInt()>=0 && arg[1].toInt()<NUM_VALVES){
@@ -301,7 +302,7 @@ void cmdToAction(String arg[],int numArg){
         Serial.println("VALVE "+ String(arg[1].toInt()) + " NOT IN USE");
       }
     } else {
-      Serial.println("VALVE DOES NOT EXIST!");  
+      Serial.println(F("VALVE DOES NOT EXIST!"));  
     }
   } else if (arg[0]=="HOME"){
     goHome();
@@ -316,7 +317,7 @@ void cmdToAction(String arg[],int numArg){
       Serial.println(bebidas_s[i] + ": " + String(i));
     }
   } else {
-    Serial.println("COMMAND NOT FOUND");
+    Serial.println(F("COMMAND NOT FOUND"));
   }
 
 //EJEMPLO DE BEBIDAS PRE-ESTABLECIDAS
@@ -346,7 +347,7 @@ boolean validateInput(int v,int d[][2], int dim){
   for (i = 0; i<dim; i++){
     if (getValveIndexFromDrink(d[i][0])== -1){ //si no esta disponible la bebida, tiro error
       #ifdef DEBUG
-        Serial.println("VALIDATION NOT OK");
+        Serial.println(F("VALIDATION NOT OK"));
       #endif
       return 0;
     }
@@ -448,40 +449,6 @@ void goTo(long pos){
                                                    // y step(-1) valla hacia adentro.
 }
 
-void goToA(long pos){
-  long steps = distanceToSteps(pos - currentPos);
-  int dir = (steps >= 0)?1:-1;
-  int stepGap;
-  int i;
-  
-  float k;
-  float v;
-  float prev_v;
-  float halfsteps;
-  
-  steps = dir*steps; // valor absoluto
-  halfsteps=steps*0.5; // queda en decimal
-  stepGap=steps*0.05; // me muevo de a 5% VER QUE VALOR TOMO
-
-  for (i = 0; i < steps; i+= stepGap){
-    k=1.0*abs(halfsteps-i)/halfsteps; // indice posición respecto al medio
-    v = STP_MAX*(1-k); // ACA SE PUEDE MULTIPLICAR POR 0,ALGO PARA FRENAR UN PPOCO
-
-    if (v >= STP_MAX) v = STP_MAX; // me aseguro de no pasarme de las velocidades maximas y minimas
-    if (v<=STP_MIN) v = STP_MIN;
-    if (v != prev_v) { // no seteo dos veces la misma velocidad, hace todo mas fluido
-      stepper.setSpeed(v);
-      prev_v = v;
-    }
-
-    if (i+stepGap > steps) { //si voy a dar steps demas, compenso
-      stepper.step(dir*steps-i);
-    } else {
-      stepper.step(dir*stepGap);
-    }
-  }
-  currentPos = pos;
-}
 
 void goToSmooth(long pos){
   //Serial.println(pos);
@@ -545,7 +512,7 @@ void goToSmooth(long pos){
 
 void goHome(){
   #ifdef DEBUG
-    Serial.println("GOING HOME, WAITING FOR LIMIT SWITCH");
+    Serial.println(F("GOING HOME, WAITING FOR LIMIT SWITCH"));
   #endif
 
   stepper.setSpeed(STP_HOMESPEED);
@@ -554,7 +521,7 @@ void goHome(){
   }
   currentPos = 0;
   #ifdef DEBUG
-    Serial.println("HOME OK");
+    Serial.println(F("HOME OK"));
   #endif
 }
 
