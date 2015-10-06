@@ -57,6 +57,7 @@
 #define POS_POR_PASO 0.1 //TODO: ver que pongo aca
 
 String bebidas_s[NUM_DRINKS] = {"FERNET", "VODKA","RON", "TEQUILA", "COCA COLA", "NARANJA", "GANCIA", "SPRITE"}; // ESTO Y LO DE ABAJO DEBERIAN SER IGUALES
+String bebidas_preset_s[2] = {"FERNET-COLA", "DESTORNILLADOR"};
 enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA, GANCIA, SPRITE}; //todavia no se para q usar esto <<<<
 //String menu1[2] = {"HACER BEBIDA", "CONFIGURACION "};
 
@@ -142,6 +143,7 @@ void menu1(){
 
   do {
     b = readButtons();
+    delay(5);
     Serial.println("i: "+String(i)+"\nj: "+String(j)+"\nb: "+String(b));
 
     if (b != last) {
@@ -197,8 +199,11 @@ void menu1(){
   } while (b != SELECT);
 
   switch (i) {
+    case 0:
+    menuPre();
+    break;
     case 1:
-    menu2(i);
+    menuPer();
     break;
 
     default:
@@ -208,7 +213,59 @@ void menu1(){
   }
 }
 
-void menu2(int index){
+void menuPre(){
+  int j=0;
+  int lj=-1;
+  int b;
+  int last=SELECT;
+
+
+
+  do {
+    b = readButtons();
+    delay(10);
+    //Serial.println("j: "+String(j)+"\nb: "+String(b));
+
+    if (b != last) {
+      last = b;
+      switch (b){
+        case ABAJO:    
+        break;
+        case ARRIBA:
+        break;
+        case IZQUIERDA:
+        j--;
+        break;
+        case DERECHA:
+        j++;
+        break;
+        case SELECT:
+        break;
+        default:
+        break;
+      }
+    } else {
+      b = DEF;
+    }
+
+    if (j>2) j = 0;
+    if (j<0) j = 2;
+
+
+
+    if (j != lj){
+      lj = j;
+      lcd.clear();
+      lcd.print(bebidas_preset_s[j]);
+    }  
+  } while (b != SELECT);
+
+    lcd.clear();
+    lcd.print("HAGO la bebida");
+    delay(2000);
+}
+
+void menuPer(){
   int j=0;
   int lj=-1;
   byte lp[8]={0};
@@ -216,11 +273,11 @@ void menu2(int index){
   int last=SELECT;
   byte porcentaje[8]={0};
 
-  Serial.println(index);
 
 
   do {
     b = readButtons();
+    delay(10);
     //Serial.println("j: "+String(j)+"\nb: "+String(b));
 
     if (b != last) {
@@ -256,18 +313,11 @@ void menu2(int index){
     if (j != lj || porcentaje[j] != lp[j]){
       lj = j;
       lp[j]=porcentaje[j];
-      switch (index){
-      case 1:
-        lcd.clear();
-        lcd.print(bebidas_s[j]);
-        lcd.setCursor(0,1);
-        lcd.print(String(porcentaje[j])+"%");
-        break;
-  
-      default:
-      break;
-      }   
-    }  
+      lcd.clear();
+      lcd.print(bebidas_s[j]);
+      lcd.setCursor(0,1);
+      lcd.print(String(porcentaje[j])+"%");
+     }   
   } while (b != SELECT);
 
     lcd.clear();
