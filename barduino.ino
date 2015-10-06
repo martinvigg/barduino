@@ -1,5 +1,8 @@
+#include <LiquidCrystal.h>
+
 #include <EEPROM.h>
 #include <Stepper.h>
+
 
 #define DEBUG
 #define ACCEL
@@ -40,6 +43,13 @@
 #define STP_HOMESPEED 25
 #define STP_STEPS 200
 
+#define A_default 1000
+#define A_sel 638
+#define A_left 410
+#define A_down 257
+#define A_up 101
+#define A_right 0
+
 #define NUM_VALVES 8
 #define NUM_DRINKS 8
 
@@ -48,6 +58,9 @@
 
 String bebidas_s[NUM_DRINKS] = {"FERNET", "VODKA","RON", "TEQUILA", "COCA COLA", "NARANJA", "GANCIA", "SPRITE"}; // ESTO Y LO DE ABAJO DEBERIAN SER IGUALES
 enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA, GANCIA, SPRITE}; //todavia no se para q usar esto <<<<
+//String menu1[2] = {"HACER BEBIDA", "CONFIGURACION "};
+
+enum BOTONES {DEF,SELECT,  ARRIBA,  ABAJO,  IZQUIERDA,  DERECHA};
 
 typedef struct valve_s {
     byte index;
@@ -61,14 +74,26 @@ valve_t valve[NUM_VALVES];
 
 Stepper stepper(STP_STEPS, STP1, STP2, STP3, STP4);
 
+//LiquidCrystal(rs, enable, d4, d5, d6, d7)
+LiquidCrystal lcd (46,48,38,40,42,44);
+
 char sepChar = ' ';
 char subSepChar = ';';
 String bufferString = "";
 long currentPos = 0;
+int last = DEF;
+int asd;
+
+int m_i, m_j;
+int l_i, l_j;
+int lastInput=0;
+
 
 void setup() {
   Serial.begin(9600);
   stepper.setSpeed(STP_DEFAULTSPEED);
+  lcd.begin(16,2);
+  lcd.print("barduino");
   
   
   pinSetup();
@@ -77,12 +102,180 @@ void setup() {
   
   goHome();
 
+  m_i=0;
+  m_j=0;
+  l_i=0;
+  l_j=0;
+
   Serial.println(F("BARDUINO IS READY"));
 }
 
 void loop() {
   serialEvent();
+  menu1();
 }
+
+int readButtons(){
+  byte i = 0;
+  int lastAnalog = analogRead(A0);
+  int analog = lastAnalog;
+  int error = 50;
+
+  if (analog > (A_default - error)) return DEF;
+  if (analog < (A_right + error))   return DERECHA;
+  if (analog < (A_up + error))      return ARRIBA;
+  if (analog < (A_down + error))    return ABAJO;
+  if (analog < (A_left + error))    return IZQUIERDA;  
+  if (analog < (A_sel + error))     return SELECT;  
+
+  return DEF;
+}
+
+
+
+void menu1(){
+  int i=0,j=0;
+  int li=1, lj=1;
+  int b;
+  int last=0;
+  
+
+  do {
+    b = readButtons();
+    Serial.println("i: "+String(i)+"\nj: "+String(j)+"\nb: "+String(b));
+
+    if (b != last) {
+      last = b;
+      switch (b){
+        case ABAJO:      
+        break;
+        case ARRIBA:
+        break;
+        case IZQUIERDA:
+        i--;
+        break;
+        case DERECHA:
+        i++;
+        break;
+        case SELECT:
+        break;
+        default:
+        break;
+      }
+    }
+
+    if (i>2) i = 0;
+    if (i<0) i = 2;
+    
+
+
+    if (i != li || j != lj){
+      li = i;
+      lj = j;
+      switch (i){
+      case 0:
+        lcd.clear();
+        lcd.print("BEBIDAS PRE-CONFIGURADAS");
+        break;
+  
+      case 1:
+        lcd.clear();
+        lcd.print("BEBIDA PERSONALIZADA");
+        break;
+        break;
+  
+      case 2:
+        lcd.clear();
+        lcd.print("CONFIGURACION");
+        break;
+      break;
+  
+      default:
+      break;
+      }   
+    }  
+  } while (b != SELECT);
+
+  switch (i) {
+    case 1:
+    menu2(i);
+    break;
+
+    default:
+    lcd.clear();
+    lcd.print("HAGO LO Q DIGA EL MENU "+ String(i));
+    delay(2000);
+  }
+}
+
+void menu2(int index){
+  int j=0;
+  int lj=-1;
+  byte lp[8]={0};
+  int b;
+  int last=SELECT;
+  byte porcentaje[8]={0};
+
+  Serial.println(index);
+
+
+  do {
+    b = readButtons();
+    //Serial.println("j: "+String(j)+"\nb: "+String(b));
+
+    if (b != last) {
+      last = b;
+      switch (b){
+        case ABAJO:   
+        porcentaje[j]-=5;     
+        break;
+        case ARRIBA:
+        porcentaje[j]+=5;
+        break;
+        case IZQUIERDA:
+        j--;
+        break;
+        case DERECHA:
+        j++;
+        break;
+        case SELECT:
+        break;
+        default:
+        break;
+      }
+    } else {
+      b = DEF;
+    }
+
+    if (j>7) j = 0;
+    if (j<0) j = 7;
+    if (porcentaje[j] > 100) porcentaje[j] = 0;
+    if (porcentaje[j]<0) porcentaje[j]=100;
+
+
+    if (j != lj || porcentaje[j] != lp[j]){
+      lj = j;
+      lp[j]=porcentaje[j];
+      switch (index){
+      case 1:
+        lcd.clear();
+        lcd.print(bebidas_s[j]);
+        lcd.setCursor(0,1);
+        lcd.print(String(porcentaje[j])+"%");
+        break;
+  
+      default:
+      break;
+      }   
+    }  
+  } while (b != SELECT);
+
+    lcd.clear();
+    lcd.print("HAGO la bebida");
+    delay(2000);
+}
+
+
 
 void firstTimeSetUp(){
   int i;
