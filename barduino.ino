@@ -1,17 +1,16 @@
 #include <LiquidCrystal.h>
-
 #include <EEPROM.h>
 #include <Stepper.h>
 
-
+//DEBUG DEFINITIONS
 #define DEBUG
 #define ACCEL
 
+//S-CURVE GENERATION
 #define SMOOTHSTEP(x) ((x) * (x) * (3 - 2 * (x))) // << SE PUEDE APLICAR VARIAS VECES SOBRE SI MISMA
 #define SMOOTHERSTEP(X) x*x*x*(x*(x*6 - 15) + 10) // << UN POCO MAS SUAVE QUE LA ANTERIOR
 
-#define CAUDAL 0.01 // cm^3/miliseg?
-
+//VALVE RELATED VARIABLES
 #define PIN_V0 4 // PIN VALVULA 0
 #define PIN_V1 5
 #define PIN_V2 6
@@ -30,9 +29,9 @@
 #define POS_V6 700
 #define POS_V7 800
 
-#define V0_EEPROM 10 // estado de las valvulas
-                     // la bebida de c/ valvula se guarda en V0_EEPROM+NUM_VALVES
+#define V0_EEPROM 10
 
+//STEPPER RELATED VARIABLES
 #define STP1  9 // PINES DEL MOTOR PAP
 #define STP2 10
 #define STP3 11
@@ -42,7 +41,20 @@
 #define STP_DEFAULTSPEED 75
 #define STP_HOMESPEED 25
 #define STP_STEPS 200
+#define STP_MAXPOS 1000
 
+//LCD RELATED VARIABLES
+#define LCD_RS 46
+#define LCD_EN 48
+#define LCD_D4 38
+#define LCD_D5 40
+#define LCD_D6 42
+#define LCD_D7 44
+
+//LIMIT SWITCH PIN
+#define PIN_FDC 2 //N(ormally)O(pen)
+
+//ANALOG VALUES OF EACH BUTTON
 #define A_default 1000
 #define A_sel 638
 #define A_left 410
@@ -50,18 +62,25 @@
 #define A_up 101
 #define A_right 0
 
+//NUMBER OF...
 #define NUM_VALVES 8
 #define NUM_DRINKS 8
+#define NUM_PRESET 2
 
-#define PIN_FDC 2 //NORMAL ABIERTO DEL FINAL DE CARRERA DEL HOME
-#define POS_POR_PASO 0.1 //TODO: ver que pongo aca
+//LINEAR TRANSFORMATION VARIABLES
+#define CAUDAL 0.01
+#define POS_POR_PASO 0.1
 
+//DRINK NAME DECLARATION. DEFINE EVERY POSIBLE DRINK HERE.
 String bebidas_s[NUM_DRINKS] = {"FERNET", "VODKA","RON", "TEQUILA", "COCA COLA", "NARANJA", "GANCIA", "SPRITE"}; // ESTO Y LO DE ABAJO DEBERIAN SER IGUALES
-String bebidas_preset_s[2] = {"FERNET-COLA", "DESTORNILLADOR"};
-enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA, GANCIA, SPRITE}; //todavia no se para q usar esto <<<<
-//String menu1[2] = {"HACER BEBIDA", "CONFIGURACION "};
+enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA, GANCIA, SPRITE}; // NO SE PARA Q USAR <<<<
 
-enum BOTONES {DEF,SELECT,  ARRIBA,  ABAJO,  IZQUIERDA,  DERECHA};
+//PRE-CONFIGURED COCKTAILS GO HERE
+String bebidas_preset_s[2] = {"FERNET-COLA", "DESTORNILLADOR"};
+String bebidas_preset_m[NUM_PRESET][NUM_VALVES][2]; //LA IDEA ACA ES HACER UNA MATRIZ TIPO LA Q GENERO CUANDO HABLO X SERIAL
+
+//BUTTON ENUM
+enum BOTONES {DEF, SELECT,  ARRIBA,  ABAJO,  IZQUIERDA,  DERECHA};
 
 typedef struct valve_s {
     byte index;
@@ -73,41 +92,28 @@ typedef struct valve_s {
 
 valve_t valve[NUM_VALVES];
 
-Stepper stepper(STP_STEPS, STP1, STP2, STP3, STP4);
 
-//LiquidCrystal(rs, enable, d4, d5, d6, d7)
-LiquidCrystal lcd (46,48,38,40,42,44);
+//OBJECTS DECLARATION
+LiquidCrystal lcd (LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+Stepper stepper(STP_STEPS, STP1, STP2, STP3, STP4);
 
 char sepChar = ' ';
 char subSepChar = ';';
 String bufferString = "";
 long currentPos = 0;
-int last = DEF;
-int asd;
-
-int m_i, m_j;
-int l_i, l_j;
-int lastInput=0;
-
 
 void setup() {
   Serial.begin(9600);
   stepper.setSpeed(STP_DEFAULTSPEED);
   lcd.begin(16,2);
-  lcd.print("barduino");
-  
+  lcd.print("barduino");  //TODO: funcion para imprimir por lcd
   
   pinSetup();
   posSetup();
   readEEPROM();  
   
   goHome();
-
-  m_i=0;
-  m_j=0;
-  l_i=0;
-  l_j=0;
-
+  
   Serial.println(F("BARDUINO IS READY"));
 }
 
@@ -132,20 +138,19 @@ int readButtons(){
   return DEF;
 }
 
-
-
 void menu1(){
   int i=0,j=0;
   int li=1, lj=1;
   int b;
-  int last=0;
-  
+  int last=0;  
 
   do {
     b = readButtons();
     delay(5);
-    Serial.println("i: "+String(i)+"\nj: "+String(j)+"\nb: "+String(b));
-
+    #ifdef DEBUG
+      Serial.println("i: "+String(i)+"\nj: "+String(j)+"\nb: "+String(b));
+    #endif
+    
     if (b != last) {
       last = b;
       switch (b){
@@ -219,12 +224,9 @@ void menuPre(){
   int b;
   int last=SELECT;
 
-
-
   do {
     b = readButtons();
-    delay(10);
-    //Serial.println("j: "+String(j)+"\nb: "+String(b));
+    delay(5); // SI NO ANDA PROBAR CON 10
 
     if (b != last) {
       last = b;
@@ -251,8 +253,6 @@ void menuPre(){
     if (j>2) j = 0;
     if (j<0) j = 2;
 
-
-
     if (j != lj){
       lj = j;
       lcd.clear();
@@ -265,16 +265,257 @@ void menuPre(){
     delay(2000);
 }
 
+void menuSet(){
+  int j=0;
+  int lj=-1;
+  int v=0;
+  int lv=-1;
+  int b;
+  int last=SELECT;
+
+  do {
+    b = readButtons();
+    delay(5); // SI NO ANDA PROBAR CON 10
+
+    if (b != last) {
+      last = b;
+      switch (b){
+        case ABAJO:
+        v--;  
+        break;
+        case ARRIBA:
+        v++;
+        break;
+        case IZQUIERDA:
+        j--;
+        break;
+        case DERECHA:
+        j++;
+        break;
+        case SELECT:
+        break;
+        default:
+        break;
+      }
+    } else {
+      b = DEF;
+    }
+
+    if (j>=NUM_DRINKS) j = 0;
+    if (j<0) j = NUM_DRINKS;
+    if (v >= NUM_VALVES) v = 0; //OJO, LAS VALVULAS VAN DEL 0 AL 7, NUM_VALVES = 8!!
+    if (v < 0) v = NUM_VALVES -1;
+
+    if (j != lj || v != lv){
+      lj = j;
+      lv = v;
+
+      //TODO: llamar a funcion q imprima dos parametros x lcd lcd2p(nombre p1, p1, nombre p2, p2);
+      
+    }  
+  } while (b != SELECT);
+
+  setUpValve(v,j);
+  
+}
+
+void menuConf(){
+  int j=0;
+  int lj=-1;
+  int b;
+  int last=SELECT;
+
+  do {
+    b = readButtons();
+    delay(5); // SI NO ANDA PROBAR CON 10
+
+    if (b != last) {
+      last = b;
+      switch (b){
+        case ABAJO:    
+        break;
+        case ARRIBA:
+        break;
+        case IZQUIERDA:
+        j--;
+        break;
+        case DERECHA:
+        j++;
+        break;
+        case SELECT:
+        break;
+        default:
+        break;
+      }
+    } else {
+      b = DEF;
+    }
+
+    if (j>2) j = 0;
+    if (j<0) j = 2;
+
+    if (j != lj){
+      switch (j){
+        case 0:
+          lcd.clear();
+          lcd.print("ABRIR VALVULA");
+        break;
+        case 1:
+          lcd.clear();
+          lcd.print("CERRAR VALVULA");
+        break;
+        case 2:
+          lcd.clear();
+          lcd.print("DEBUG");
+        break;
+      }
+    }  
+  } while (b != SELECT);
+
+  switch (j){
+        case 0:
+          menuSet();
+        break;
+        case 1:
+          menuClose();
+        break;
+        case 2:
+          menuDebug();
+        break;
+      }
+}
+
+void menuClose(){
+  int j=0;
+  int lj=-1;
+  int b;
+  int last=SELECT;
+
+  do {
+    b = readButtons();
+    delay(5); // SI NO ANDA PROBAR CON 10
+
+    if (b != last) {
+      last = b;
+      switch (b){
+        case ABAJO:    
+        break;
+        case ARRIBA:
+        break;
+        case IZQUIERDA:
+        j--;
+        break;
+        case DERECHA:
+        j++;
+        break;
+        case SELECT:
+        break;
+        default:
+        break;
+      }
+    } else {
+      b = DEF;
+    }
+
+    if (j>= NUM_VALVES) j = 0;
+    if (j<0) j = NUM_VALVES -1;
+
+    if (j != lj){
+      lcd.clear();
+      lcd.print("Cerrar Valvula:");
+      lcd.setCursor(0,1);
+      lcd.print(j);
+    }  
+  } while (b != SELECT);
+
+  closeValve(j);
+}
+
+void menuDebug(){
+  int j=0;
+  int lj=-1;
+  int b;
+  int last=SELECT;
+  int arg[2] = {0};
+  int larg[2] = {0};
+
+  do {
+    b = readButtons();
+    delay(5); // SI NO ANDA PROBAR CON 10
+
+    if (b != last) {
+      last = b;
+      switch (b){
+        case ABAJO:   
+        arg[j] -= 10; 
+        break;
+        case ARRIBA:
+        arg[j] += 10; 
+        break;
+        case IZQUIERDA:
+        j--;
+        break;
+        case DERECHA:
+        j++;
+        break;
+        case SELECT:
+        break;
+        default:
+        break;
+      }
+    } else {
+      b = DEF;
+    }
+
+    if (j>2) j = 0;
+    if (j<0) j = 2;
+    if (arg[j] > STP_MAXPOS) arg[j]=STP_MAXPOS;
+    if (arg[j] < 10) arg[j]=10; //NO QUIERO Q LO PUEDAN HACER HOME DESDE EL GOTO PORQUE NO PUSE UNA INTERRUPCION EN EL FDC
+
+    if (j != lj || arg[j] != larg[j]){
+      lj = j;
+      larg[j]=arg[j];
+      
+      switch (j){
+        case 0:
+          lcd.clear();
+          lcd.print("GOTO");
+          //TODO function q imprima x lcd
+        break;
+        case 1:
+          lcd.clear();
+          lcd.print("GOTOA");
+        break;
+        case 2:
+          lcd.clear();
+          lcd.print("HOME");
+        break;
+      }
+    }  
+  } while (b != SELECT);
+
+  switch (j){
+        case 0:
+          stepper.setSpeed(STP_MIN);
+          goTo(arg[0]);
+        break;
+        case 1:
+          goToSmooth(arg[1]);
+        break;
+        case 2:
+          goHome();
+        break;
+      }
+}
+
 void menuPer(){
   int j=0;
   int lj=-1;
   byte lp[8]={0};
+  byte porcentaje[8]={0};
   int b;
   int last=SELECT;
-  byte porcentaje[8]={0};
-
-
-
+ 
   do {
     b = readButtons();
     delay(10);
@@ -303,7 +544,7 @@ void menuPer(){
     } else {
       b = DEF;
     }
-
+    
     if (j>7) j = 0;
     if (j<0) j = 7;
     if (porcentaje[j] > 100) porcentaje[j] = 0;
@@ -324,7 +565,6 @@ void menuPer(){
     lcd.print("HAGO la bebida");
     delay(2000);
 }
-
 
 
 void firstTimeSetUp(){
@@ -692,7 +932,6 @@ void goTo(long pos){
                                                    // y step(-1) valla hacia adentro.
 }
 
-
 void goToSmooth(long pos){
   //Serial.println(pos);
   long steps = distanceToSteps(pos - currentPos);
@@ -751,7 +990,6 @@ void goToSmooth(long pos){
   Serial.println("VEL FINAL= "+String(x)+"\nSTEPSCOMPUTADOS: "+String(stepsdone));
   currentPos=pos;
 }
-
 
 void goHome(){
   #ifdef DEBUG
