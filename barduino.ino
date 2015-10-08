@@ -4,8 +4,8 @@
 #include <Stepper.h>
 
 //DEBUG DEFINITIONS
-#define DEBUG
-#define ACCEL
+#define DEBUG //SHOW TONS OF DEBUG MESSAGES VIA SERIAL
+#define ACCEL //USE GOTOSMOOTH INSTEAD OF GOTO
 
 //S-CURVE GENERATION
 #define SMOOTHSTEP(x) ((x) * (x) * (3 - 2 * (x))) // << SE PUEDE APLICAR VARIAS VECES SOBRE SI MISMA
@@ -16,10 +16,10 @@
 #define PIN_V1 5
 #define PIN_V2 6
 #define PIN_V3 7
-#define PIN_V4 0
-#define PIN_V5 0
-#define PIN_V6 0
-#define PIN_V7 0
+#define PIN_V4 8
+#define PIN_V5 13
+#define PIN_V6 14
+#define PIN_V7 15
 
 #define POS_V0 100
 #define POS_V1 200
@@ -34,7 +34,7 @@
 
 //STEPPER RELATED VARIABLES
 #define STP1  9 // PINES DEL MOTOR PAP
-#define STP2 10
+#define STP2 10 
 #define STP3 11
 #define STP4 12
 #define STP_MAX 200
@@ -43,6 +43,7 @@
 #define STP_HOMESPEED 25
 #define STP_STEPS 200
 #define STP_MAXPOS 1000
+#define STP_PULLEY 0.008
 
 //LCD RELATED VARIABLES
 #define LCD_RS 46
@@ -54,6 +55,9 @@
 
 //LIMIT SWITCH PIN
 #define PIN_FDC 2 //N(ormally)O(pen)
+
+//CUP SENSOR PIN
+#define CUP_SENSOR 16 // INTERNAL PULLUP, TIRAR A GND CUANDO HAY UN VASO
 
 //ANALOG VALUES OF EACH BUTTON
 #define A_default 1000
@@ -73,12 +77,19 @@
 #define POS_POR_PASO 0.1
 
 //DRINK NAME DECLARATION. DEFINE EVERY POSIBLE DRINK HERE.
-String bebidas_s[NUM_DRINKS] = {"FERNET", "VODKA","RON", "TEQUILA", "COCA COLA", "NARANJA", "GANCIA", "SPRITE"}; // ESTO Y LO DE ABAJO DEBERIAN SER IGUALES
-enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA, GANCIA, SPRITE}; // NO SE PARA Q USAR <<<<
+//---------------------------------------------------------
+//  both arrays must be in the same order!
+//  alcoholic drinks should go first, then sodas and mixers
+//---------------------------------------------------------
+String bebidas_s[NUM_DRINKS] = {"FERNET", "VODKA","RON", "TEQUILA", "COCA COLA", "NARANJA", "GANCIA", "SPRITE"};
+enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA, GANCIA, SPRITE};
 
 //PRE-CONFIGURED COCKTAILS GO HERE
-String bebidas_preset_s[2] = {"FERNET-COLA", "DESTORNILLADOR"};
-//String bebidas_preset_m[NUM_PRESET][NUM_VALVES][2]; //LA IDEA ACA ES HACER UNA MATRIZ TIPO LA Q GENERO CUANDO HABLO X SERIAL
+//---------------------------------------------------------
+//  this string holds the names shown in the lcd
+//  array with drink and % is made in menuPer().
+//---------------------------------------------------------
+String bebidas_preset_s[NUM_PRESET] = {"FERNET-COLA", "DESTORNILLADOR"};
 
 //BUTTON ENUM
 enum BOTONES {DEF, SELECT,  ARRIBA,  ABAJO,  IZQUIERDA,  DERECHA};
@@ -176,6 +187,22 @@ void lcd_print1p1s(String s1, String arg1, String s2){
   lcd.print(s1+" "+arg1);
   lcd.setCursor(0,1);
   lcd.print(s2);
+}
+
+void lcd_printSpeed(float s1, float s2){
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print(String(("%4.2f",s1)) + " m/s");
+  lcd.setCursor(0,1);
+  lcd.print(String(("%4.2f",s1)) + " RPM");
+}
+
+void lcd_print2l(String l1, String l2){
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print(l1);
+  lcd.setCursor(0,1);
+  lcd.print(l2);
 }
 
 void menuPpal(){
@@ -305,8 +332,8 @@ void menuTam(int next){
 void menuPre(int v){
   int j=0;
   int lj=-1;
-  int p[2] = {0};
-  int lp[2] = {0};
+  int p[NUM_PRESET] = {0};
+  int lp[NUM_PRESET] = {0};
   int b;
   int last=SELECT;
 
@@ -338,8 +365,8 @@ void menuPre(int v){
       b = DEF;
     }
 
-    if (j>2) j = 0;
-    if (j<0) j = 2;
+    if (j>=NUM_PRESET) j = 0;
+    if (j<0) j = NUM_PRESET - 1;
     switch (j) { // POR SI QUIERO AGREGAR CONCENTRACIONES MAXIMAS Y MINIMAS.
       case 0: // FERNET
         if (p[j]<15) p[j]=15;
@@ -391,6 +418,7 @@ void menuPre(int v){
       d[1][1] = floor((float)v*(100 - p[j])/100);
 
       if (validateInput(v, d, 2)) {
+        lcd_printBreak("HACIENDOBEBIDA...", 7);
         make(d, 2);
       } else {
         lcd_print("ERROR");
@@ -404,8 +432,8 @@ void menuPre(int v){
 void menuPer(int v){
   int j=0;
   int lj=-1;
-  byte lp[8]={0};
-  byte porcentaje[8]={0};
+  byte lp[NUM_VALVES]={0};
+  byte porcentaje[NUM_VALVES]={0};
   int b;
   int last=SELECT;
  
@@ -440,8 +468,8 @@ void menuPer(int v){
 
     if (!(valve[j].active)) j++; // SI NO  ESTA LLENA LA VALVULA ME SALTEO.
     
-    if (j>7) j = 0;
-    if (j<0) j = 7;
+    if (j>=NUM_VALVES) j = 0;
+    if (j<0) j = NUM_VALVES -1;
     if (porcentaje[j] > 100) porcentaje[j] = 0;
     if (porcentaje[j]<0) porcentaje[j]=100;
 
@@ -739,6 +767,7 @@ void pinSetup(){
   pinMode(STP2, OUTPUT);
   pinMode(STP3, OUTPUT);
   pinMode(STP4, OUTPUT);
+  pinMode(CUP_SENSOR, INPUT_PULLUP);
 
   valve[0].pin = PIN_V0;
   valve[1].pin = PIN_V1;
@@ -1023,6 +1052,10 @@ int getValveIndexFromDrink(int d){
   return -1;
 }
 
+bool cupPresent(){
+  return !digitalRead(CUP_SENSOR);
+}
+
 void make(int d[][2], int dim){
   int i, v_i;
   if (currentPos != 0) {
@@ -1030,6 +1063,10 @@ void make(int d[][2], int dim){
       Serial.println("NOT AT HOME WHEN MAKE()");
     #endif
       goHome();
+  }
+
+  if (!cupPresent()){
+    while (!cupPresent());
   }
 
   for (i = 0; i<dim; i++){
@@ -1042,12 +1079,23 @@ void make(int d[][2], int dim){
       #else
         goTo(valve[v_i].pos);
       #endif
+      lcd_print2l(bebidas_s[valve[v_i].drink], String(d[i][1])+" ml");
       pour(valve[v_i].pin, d[i][1]);
   }
 
   //TODO: revolver bebida ;) ;)
   if (currentPos>10) goToSmooth(10);
-  goHome(); 
+  goHome();
+
+  lcd_print("RETIRE EL VASO!");  
+
+  if (cupPresent()){
+    while (cupPresent());
+  }
+
+  lcd_printBreak("DISFRUTESU BEBIDA!",7);
+  delay(2500);
+  
   #ifdef DEBUG
     Serial.println("ENJOY YOUR DRINK!!");
   #endif 
@@ -1093,6 +1141,7 @@ void goToSmooth(long pos){
     v=SMOOTHSTEP(v);
     x = (STP_MAX * v) + (STP_MIN * (1 - v)); //VELOCIDAD INICAL != 0
     stepper.setSpeed(x);
+    lcd_printSpeed(x, STP_PULLEY*x*3.14/30);
     Serial.println("VEL "+String(x));
     if (i+stepGap<=N) {
       stepper.step(dir*stepGap);
@@ -1104,6 +1153,7 @@ void goToSmooth(long pos){
   }
   
   Serial.println("VEL MAX= "+String(x));
+  
   stepper.step(dir*(steps-2*stepsdone));
   stepsdone += steps-2*stepsdone;
   
@@ -1115,6 +1165,7 @@ void goToSmooth(long pos){
     v = SMOOTHSTEP(v);
     x = (STP_MIN * v) + (vmax * (1 - v));
     stepper.setSpeed(x);
+    lcd_printSpeed(x, STP_PULLEY*x*3.14/30);
     Serial.println("VEL "+String(x));
     if (i+stepGap<=N) {
       stepper.step(dir*stepGap);
