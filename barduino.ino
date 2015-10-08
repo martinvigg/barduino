@@ -42,8 +42,8 @@
 #define STP_DEFAULTSPEED 75
 #define STP_HOMESPEED 25
 #define STP_STEPS 200
-#define STP_MAXPOS 1000
-#define STP_PULLEY 0.008
+#define STP_MAXPOS 1000 // mm desde HOME
+#define STP_PULLEY 0.008 // Metros, para que v_lin = [m/s]. << si resulta muy chico pasar a cm, mm, um, pm, etc
 
 //LCD RELATED VARIABLES
 #define LCD_RS 46
@@ -74,7 +74,7 @@
 
 //LINEAR TRANSFORMATION VARIABLES
 #define CAUDAL 0.01
-#define POS_POR_PASO 0.1
+#define POS_POR_PASO 0.2 //mm por paso
 
 //DRINK NAME DECLARATION. DEFINE EVERY POSIBLE DRINK HERE.
 //---------------------------------------------------------
