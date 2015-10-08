@@ -74,7 +74,7 @@
 
 //LINEAR TRANSFORMATION VARIABLES
 #define CAUDAL 0.01
-#define POS_POR_PASO 0.2 //mm por paso
+#define STEPS_X_MM 5 //STEPS X MILIMETRO // POLEA:STEPS 20:5 16:6.25
 
 //DRINK NAME DECLARATION. DEFINE EVERY POSIBLE DRINK HERE.
 //---------------------------------------------------------
@@ -1103,9 +1103,9 @@ void make(int d[][2], int dim){
 
 long distanceToSteps(long pos) {
   #ifdef DEBUG
-    Serial.println("DISTANCE: "+String(pos)+" -> STEPS: "+String(round(pos/POS_POR_PASO)));
+    Serial.println("DISTANCE: "+String(pos)+" -> STEPS: "+String(round(pos*STEPS_X_MM)));
   #endif
-  return round(pos/POS_POR_PASO);
+  return round(pos*STEPS_X_MM);
 }
 
 void goTo(long pos){
