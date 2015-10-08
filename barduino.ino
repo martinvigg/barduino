@@ -91,6 +91,13 @@ enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA, GANCIA, SPRIT
 //---------------------------------------------------------
 String bebidas_preset_s[NUM_PRESET] = {"FERNET-COLA", "DESTORNILLADOR"};
 
+byte in_preset [NUM_PRESET][NUM_DRINKS] {
+  // FERNE  VODKA   RON   TEQUILA   COCA COLA   NARANJA   GANCIA   SPRITE 
+   {1,     0,      0,    0,        1,          0,        0,       0      },
+   {0,     1,      0,    0,        0,          1,        0,       0      }
+};
+
+
 //BUTTON ENUM
 enum BOTONES {DEF, SELECT,  ARRIBA,  ABAJO,  IZQUIERDA,  DERECHA};
 
@@ -129,7 +136,7 @@ void setup() {
 }
 
 void loop() {
-  serialEvent();
+  //serialEvent();
   menuPpal();
 }
 
@@ -192,9 +199,9 @@ void lcd_print1p1s(String s1, String arg1, String s2){
 void lcd_printSpeed(float s1, float s2){
   lcd.clear();
   lcd.setCursor(0,0);
-  lcd.print(String(("%4.2f",s1)) + " m/s");
-  lcd.setCursor(0,1);
   lcd.print(String(("%4.2f",s1)) + " RPM");
+  lcd.setCursor(0,1);
+  lcd.print(String(("%4.2f",s2)) + " m/s");
 }
 
 void lcd_print2l(String l1, String l2){
@@ -205,18 +212,30 @@ void lcd_print2l(String l1, String l2){
   lcd.print(l2);
 }
 
-void menuPpal(){
-  int i=0,j=0;
-  int li=1, lj=1;
-  int b;
-  int last=0;  
+byte canIDo(byte index){
+  int i;
+  for (i = 0; i<NUM_DRINKS; i++){
+    Serial.println(i);
+    if (in_preset[index][i]){
+      if (getValveIndexFromDrink(4)== -1){
+        Serial.println("NO PUEDO HACER");
+        return 0;
+      }
+    }
+  }  
+  Serial.println("PUEDO HACER");
+  return 1;
+}
 
+void menuPpal(){
+  int i=0;
+  int li=-1;
+  int b;
+  int last=DEF;  
+  Serial.println("ENTRO A MENUPPAL");
   do {
     b = readButtons();
     delay(5);
-    #ifdef DEBUG
-      Serial.println("i: "+String(i)+"\nj: "+String(j)+"\nb: "+String(b));
-    #endif
     
     if (b != last) {
       last = b;
@@ -243,15 +262,14 @@ void menuPpal(){
     
 
 
-    if (i != li || j != lj){
+    if (i != li){
       li = i;
-      lj = j;
       switch (i){
         case 0:
-          lcd_printBreak("BEBIDASPRECONFIGURADAS", 6);
+          lcd_print2l("BEBIDAS","PRECONFIGURADAS");
           break;  
         case 1:
-          lcd_printBreak("BEBIDAPERSONALIZADA", 5);
+          lcd_print2l("BEBIDA","PERSONALIZADA");
           break;  
         case 2:
           lcd_print("CONFIGURACION");
@@ -260,15 +278,19 @@ void menuPpal(){
           break;
       }   
     }  
-  } while (b != SELECT);
+  } while ((b != SELECT));
 
+  while (readButtons());
   switch (i) {
-    case 0:
-      menuTam(0);
+    case 0:      
+      menuTam(i);      
       break;
     case 1:
-      menuTam(1);
+      menuTam(i);      
       break;
+    case 2:
+      menuConf();
+      break;      
     default:
       break;
   }
@@ -276,9 +298,10 @@ void menuPpal(){
 
 void menuTam(int next){
   int j=0;
-  int lj=1;
+  int lj=-1;
   int b;
-  int last=0;  
+  int last=SELECT;  
+  Serial.println("ENTRO A MENUTAM");
 
   do {
     b = readButtons();
@@ -289,17 +312,21 @@ void menuTam(int next){
       switch (b){
         case ABAJO:   
         j-=25;   
+        Serial.println(j);
         break;
         case ARRIBA:
         j+=25;
+        Serial.println(j);
         break;
         case IZQUIERDA:
         j-=25; 
+        Serial.println(j);
         break;
         case DERECHA:
         j+=25;
+        Serial.println(j);
         break;
-        case SELECT:
+        case SELECT: 
         break;
         default:
         break;
@@ -309,23 +336,30 @@ void menuTam(int next){
     if (j>500) j = 500;
     if (j<0) j = 0;
     
-
-
     if (j != lj){
-      lj = j;      
-      lcd_print1p("CAPACIDAD VASO:", String(j));
+      lj = j;
+      lcd_print2l("CAPACIDAD VASO:", String(j)+" ml");
     }  
+    Serial.println(b != SELECT);
   } while (b != SELECT);
 
-  switch (next) {
-    case 0:
-      menuPre(j);
-      break;
-    case 1:
-      menuPer(j);
-      break;
-    default:
-      break;
+  
+  if (j) {
+    switch (next) {
+      case 0:
+      while (readButtons());
+        menuPre(j);
+        break;
+      case 1:
+      while (readButtons());
+        menuPer(j);
+        break;
+      default:
+        break;
+    }
+  } else {
+    lcd_print2l("TAMANIO","INVALIDO");
+    delay(3000);
   }
 }
 
@@ -336,96 +370,120 @@ void menuPre(int v){
   int lp[NUM_PRESET] = {0};
   int b;
   int last=SELECT;
+  int canI = 0;
 
-  do {
-    b = readButtons();
-    delay(5); // SI NO ANDA PROBAR CON 10
+  Serial.println("ENTRO A MENUPRE");
 
-    if (b != last) {
-      last = b;
-      switch (b){
-        case ABAJO:
-        p[j]-=5;    
-        break;
-        case ARRIBA:
-        p[j]+=5;  
-        break;
-        case IZQUIERDA:
-        j--;
-        break;
-        case DERECHA:
-        j++;
-        break;
-        case SELECT:
-        break;
-        default:
-        break;
+  for (int x = 0; x <NUM_PRESET; x++){
+    if (canIDo(x)) {
+      canI = 1;
+      break;
+    }
+  }
+
+  if (canI){     
+    do {
+      b = readButtons();
+      delay(5); // SI NO ANDA PROBAR CON 10
+  
+      if (b != last) {
+        last = b;
+        switch (b){
+          case ABAJO:
+          p[j]-=5;    
+          break;
+          case ARRIBA:
+          p[j]+=5;  
+          break;
+          case IZQUIERDA:
+          do {
+            j--;          
+          } while (canIDo(j)==0);
+          break;
+          case DERECHA:
+          do {
+            j++;          
+          } while (canIDo(j)==0);
+          break;
+          case SELECT:
+          break;
+          default:
+          break;
+        }
+      } else {
+        b = DEF;
       }
-    } else {
-      b = DEF;
-    }
-
-    if (j>=NUM_PRESET) j = 0;
-    if (j<0) j = NUM_PRESET - 1;
-    switch (j) { // POR SI QUIERO AGREGAR CONCENTRACIONES MAXIMAS Y MINIMAS.
-      case 0: // FERNET
-        if (p[j]<15) p[j]=15;
-        if (p[j]>40) p[j]=40;
-        break;
-      case 1: // DESTORNILLADOR
-        if (p[j]<15) p[j]=15;
-        if (p[j]>40) p[j]=40;
-        break;
-      default:
-      break;        
-    }
-
-    if (j != lj){
-      lj = j;
+  
+      if (j>=NUM_PRESET) j = 0;
+      if (j<0) j = NUM_PRESET - 1;
       switch (j) { // POR SI QUIERO AGREGAR CONCENTRACIONES MAXIMAS Y MINIMAS.
-      case 0: // FERNET
-        lcd_print1p(bebidas_preset_s[j], String(p[j]));
-        break;
-      case 1: // DESTORNILLADOR
-        lcd_print1p(bebidas_preset_s[j], String(p[j]));
-        break;      
-      default:
-        lcd_print(bebidas_preset_s[j]); //en otro caso solo muestro el nombre;
+        case 0: // FERNET
+          if (p[j]<15) p[j]=15;
+          if (p[j]>50) p[j]=50;
+          break;
+        case 1: // DESTORNILLADOR
+          if (p[j]<15) p[j]=15;
+          if (p[j]>40) p[j]=40;
+          break;
+        default:
         break;        
+      }
+  
+      if (j != lj || p[j] != lp[j]){
+        lj = j;
+        lp[j] = p[j];
+        switch (j) { // POR SI QUIERO AGREGAR CONCENTRACIONES MAXIMAS Y MINIMAS.
+        case 0: // FERNET
+          lcd_print1p(bebidas_preset_s[j], String(p[j])+"% - "+String(100-p[j])+"%");
+          break;
+        case 1: // DESTORNILLADOR
+          lcd_print1p(bebidas_preset_s[j], String(p[j])+"% - "+String(100-p[j])+"%");
+          break;      
+        default:
+          lcd_print(bebidas_preset_s[j]); //en otro caso solo muestro el nombre;
+          break;        
+      }
+      }  
+    } while (b != SELECT);
+  
+    while (readButtons());
+  
+    switch (j) {
+      int d[NUM_VALVES][2]; //DECLARO ACA EL MAXIMO DE BEBUDAS INDIVIDUALES Q PUEDE HABER
+      
+      case 0: //FERNET
+        d[0][0] = FERNET;
+        d[1][0] = COCA_COLA;
+        d[0][1] = floor((float)v*p[j]/100);
+        d[1][1] = floor((float)v*(100 - p[j])/100);
+  
+        while (readButtons());
+        if (validateInput(v, d, 2)) {
+          make(d, 2);
+        } else {
+          lcd_printBreak("ERROR DECOMPOSICION",7);
+        }
+        break;
+      case 1: //DESTORNILLADOR
+        d[0][0] = VODKA;
+        d[1][0] = NARANJA;
+        d[0][1] = floor((float)v*p[j]/100);
+        d[1][1] = floor((float)v*(100 - p[j])/100);
+        
+        
+        if (validateInput(v, d, 2)) {
+          lcd_print2l("HACIENDO","BEBIDA...");
+          make(d, 2);
+        } else {
+          lcd_print("ERROR");
+        }
+        break;
+      default:
+        break;
     }
-    }  
-  } while (b != SELECT);
-
-  switch (j) {
-    int d[NUM_VALVES][2]; //DECLARO ACA EL MAXIMO DE BEBUDAS INDIVIDUALES Q PUEDE HABER
-    
-    case 0: //FERNET
-      d[0][0] = FERNET;
-      d[1][0] = COCA_COLA;
-      d[0][1] = floor((float)v*p[j]/100);
-      d[1][1] = floor((float)v*(100 - p[j])/100);
-
-      if (validateInput(v, d, 2)) {
-        make(d, 2);
-      } else {
-        lcd_printBreak("ERROR DECOMPOSICION",7);
-      }
-      break;
-    case 1: //DESTORNILLADOR
-      d[0][0] = VODKA;
-      d[1][0] = NARANJA;
-      d[0][1] = floor((float)v*p[j]/100);
-      d[1][1] = floor((float)v*(100 - p[j])/100);
-
-      if (validateInput(v, d, 2)) {
-        lcd_printBreak("HACIENDOBEBIDA...", 7);
-        make(d, 2);
-      } else {
-        lcd_print("ERROR");
-      }
-      break;
-    default:
-      break;
+  } else {
+    lcd_print2l("BEBIDAS", "INSUFICIENTES");
+    delay(2500);
   }
 }
 
@@ -434,70 +492,97 @@ void menuPer(int v){
   int lj=-1;
   byte lp[NUM_VALVES]={0};
   byte porcentaje[NUM_VALVES]={0};
+  int canI = 0;
   int b;
   int last=SELECT;
- 
-  do {
-    b = readButtons();
-    delay(10);
-    //Serial.println("j: "+String(j)+"\nb: "+String(b));
 
-    if (b != last) {
-      last = b;
-      switch (b){
-        case ABAJO:   
-        porcentaje[j]-=5;     
-        break;
-        case ARRIBA:
-        porcentaje[j]+=5;
-        break;
-        case IZQUIERDA:
-        j--;
-        break;
-        case DERECHA:
-        j++;
-        break;
-        case SELECT:
-        break;
-        default:
-        break;
-      }
-    } else {
-      b = DEF;
-    }
-
-    if (!(valve[j].active)) j++; // SI NO  ESTA LLENA LA VALVULA ME SALTEO.
-    
-    if (j>=NUM_VALVES) j = 0;
-    if (j<0) j = NUM_VALVES -1;
-    if (porcentaje[j] > 100) porcentaje[j] = 0;
-    if (porcentaje[j]<0) porcentaje[j]=100;
-
-
-    if (j != lj || porcentaje[j] != lp[j]){
-      lj = j;
-      lp[j]=porcentaje[j];
-      lcd_print1p(bebidas_s[valve[j].drink], String(porcentaje[j])+"%");
-     }   
-  } while (b != SELECT);
-
-  int d[NUM_VALVES][2];
-  int cant=0;
-  for (int i = 0; i<NUM_VALVES; i++){
-    if (valve[i].active) {
-      if (porcentaje[i]) {        
-        d[cant][0] = valve[i].drink;
-        d[cant][1] = floor((float)v*porcentaje[i]/100);
-
-        cant++;        
+  for (int x = 0; x < NUM_VALVES; x++) {
+    if (valve[x].active){
+      if (getValveIndexFromDrink(valve[x].drink) != -1){
+          canI = 1;
+          break;
       }
     }    
   }
 
-  if (validateInput(v, d, cant)) {
-    make(d,cant);
+  if (canI) { 
+    do {
+      b = readButtons();
+      delay(10);
+      //Serial.println("j: "+String(j)+"\nb: "+String(b));
+  
+      if (b != last) {
+        last = b;
+        switch (b){
+          case ABAJO:   
+          porcentaje[j]-=5;     
+          break;
+          case ARRIBA:
+          porcentaje[j]+=5;
+          break;
+          case IZQUIERDA:
+          do {
+            j--;
+          } while (getValveIndexFromDrink(valve[j].drink) == -1);
+          break;
+          case DERECHA:
+          do {
+            j++;
+          } while (getValveIndexFromDrink(valve[j].drink) == -1);
+          break;
+          case SELECT:
+          break;
+          default:
+          break;
+        }
+      } else {
+        b = DEF;
+      }
+  
+      if (!(valve[j].active)) j++; // SI NO  ESTA LLENA LA VALVULA ME SALTEO.
+      
+      if (j>=NUM_VALVES) {
+        j = 0;
+        while(getValveIndexFromDrink(valve[j].drink) == -1) j++;
+      }
+      if (j<0) {
+        j = NUM_VALVES -1;
+        while(getValveIndexFromDrink(valve[j].drink) == -1) j--;
+      }
+      if (porcentaje[j] > 100) porcentaje[j] = 0;
+      if (porcentaje[j]<0) porcentaje[j]=100;
+  
+  
+      if (j != lj || porcentaje[j] != lp[j]){
+        lj = j;
+        lp[j]=porcentaje[j];
+        lcd_print1p(bebidas_s[valve[j].drink], String(porcentaje[j])+"%");
+       }   
+    } while (b != SELECT);
+  
+    while (readButtons());
+  
+    int d[NUM_VALVES][2];
+    int cant=0;
+    for (int i = 0; i<NUM_VALVES; i++){
+      if (valve[i].active) {
+        if (porcentaje[i]) {        
+          d[cant][0] = valve[i].drink;
+          d[cant][1] = floor((float)v*porcentaje[i]/100);
+  
+          cant++;        
+        }
+      }    
+    }
+  
+    if (validateInput(v, d, cant)) {
+      make(d,cant);
+    } else {
+      lcd_print("ERROR");
+    }
   } else {
-    lcd_print("ERROR");
+    lcd_print("NO HAY BEBIDAS!");
+    delay(2500);
   }
 }
 
@@ -537,6 +622,7 @@ void menuConf(){
     if (j<0) j = 2;
 
     if (j != lj){
+      lj = j;
       switch (j){
         case 0:
           lcd_print("ABRIR VALVULA");
@@ -551,8 +637,10 @@ void menuConf(){
     }  
   } while (b != SELECT);
 
+  while (readButtons());
   switch (j){
         case 0:
+          
           menuSet();
         break;
         case 1:
@@ -569,51 +657,84 @@ void menuSet(){
   int lj=-1;
   int v=0;
   int lv=-1;
+  int cerrados=0;
   int b;
   int last=SELECT;
 
-  do {
-    b = readButtons();
-    delay(5); // SI NO ANDA PROBAR CON 10
+  for (int x = 0; x < NUM_VALVES; x++){
+    if (valve[x].active == 0) cerrados++;
+  }
 
-    if (b != last) {
-      last = b;
-      switch (b){
-        case ABAJO:
-        v--;  
-        break;
-        case ARRIBA:
-        v++;
-        break;
-        case IZQUIERDA:
-        j--;
-        break;
-        case DERECHA:
-        j++;
-        break;
-        case SELECT:
-        break;
-        default:
-        break;
-      }
-    } else {
-      b = DEF;
+  Serial.println(cerrados);
+  
+
+  if (cerrados != 0){
+
+    while (valve[v].active) {
+      j++;
     }
-
-    if (j>=NUM_DRINKS) j = 0;
-    if (j<0) j = NUM_DRINKS;
-    if (v >= NUM_VALVES) v = 0; //OJO, LAS VALVULAS VAN DEL 0 AL 7, NUM_VALVES = 8!!
-    if (v < 0) v = NUM_VALVES -1;
-
-    if (j != lj || v != lv){
-      lj = j;
-      lv = v;
-
-      lcd_print1p1s("VALVULA:", String(v), bebidas_s[j]);      
-    }  
-  } while (b != SELECT);
-
-  setUpValve(v,j);  
+  
+    do {
+      b = readButtons();
+      delay(5); // SI NO ANDA PROBAR CON 10
+  
+      if (b != last) {
+        last = b;
+        switch (b){
+          case ABAJO:
+          do {
+            v--;
+          } while (valve[v].active);
+          break;
+          case ARRIBA:
+          do {
+            v++;
+          } while (valve[v].active);
+          break;
+          case IZQUIERDA:
+          j--;
+          break;
+          case DERECHA:
+          j++;
+          break;
+          case SELECT:
+          break;
+          default:
+          break;
+        }
+      } else {
+        b = DEF;
+      }
+  
+      if (j>=NUM_DRINKS) j = 0;
+      if (j<0) j = NUM_DRINKS;
+      if (v >= NUM_VALVES) {
+        v=-1;
+        do {
+            v++;
+        } while (valve[j].active);
+      }
+      if (v < 0) {
+        v=NUM_VALVES;
+        do {
+            v--;
+        } while (valve[j].active);
+      }
+  
+      if (j != lj || v != lv){
+        lj = j;
+        lv = v;
+  
+        lcd_print1p1s("VALVULA:", String(v), bebidas_s[j]);      
+      }  
+    } while (b != SELECT);
+  
+    while (readButtons());
+    setUpValve(v,j);
+  } else {
+    lcd_print2l("NO HAY VALVULAS","CERRADAS");
+    delay(2500);
+  }
 }
 
 void menuClose(){
@@ -621,42 +742,72 @@ void menuClose(){
   int lj=-1;
   int b;
   int last=SELECT;
+  int abiertos = 0;
+  
+  for (int x = 0; x < NUM_VALVES; x++){
+    if (valve[x].active) abiertos++;
+  }
+  
+  if (abiertos) {
 
-  do {
-    b = readButtons();
-    delay(5); // SI NO ANDA PROBAR CON 10
-
-    if (b != last) {
-      last = b;
-      switch (b){
-        case ABAJO:    
-        break;
-        case ARRIBA:
-        break;
-        case IZQUIERDA:
-        j--;
-        break;
-        case DERECHA:
-        j++;
-        break;
-        case SELECT:
-        break;
-        default:
-        break;
-      }
-    } else {
-      b = DEF;
+    while (valve[j].active == 1) {
+      j++;
     }
-
-    if (j>= NUM_VALVES) j = 0;
-    if (j<0) j = NUM_VALVES -1;
-
-    if (j != lj){
-      lcd_print1p("CERRAR VALVULA:", String(j));
-    }  
-  } while (b != SELECT);
-
-  closeValve(j);
+    
+    do {
+      b = readButtons();
+      delay(5); // SI NO ANDA PROBAR CON 10
+  
+      if (b != last) {
+        last = b;
+        switch (b){
+          case ABAJO:    
+          break;
+          case ARRIBA:
+          break;
+          case IZQUIERDA:
+          do {
+            j--;
+          } while (!(valve[j].active));
+          break;
+          case DERECHA:
+          do {
+            j++;
+          } while (!(valve[j].active));
+          break;
+          case SELECT:
+          break;
+          default:
+          break;
+        }
+      } else {
+        b = DEF;
+      }
+  
+      if (j>= NUM_VALVES) {
+        j = 0;
+        while (valve[j].active == 1) {
+          j++;
+        }
+      }
+      if (j<0) {
+        j = NUM_VALVES -1;
+        while (valve[j].active == 1) {
+          j--;
+        }
+      }
+  
+      if (j != lj){
+        lj = j;
+        lcd_print1p("CERRAR VALVULA:", String(j));
+      }  
+    } while (b != SELECT);
+    while (readButtons());
+    closeValve(j);
+  } else {
+    lcd_print2l("NO HAY VALVULAS", "ABIERTAS");
+  }
+  
 }
 
 void menuDebug(){
@@ -718,6 +869,7 @@ void menuDebug(){
     }  
   } while (b != SELECT);
 
+  while (readButtons());
   switch (j){
         case 0:
           stepper.setSpeed(STP_MIN);
@@ -1037,11 +1189,13 @@ int getValveIndexFromDrink(int d){
   #endif
   
   for (i = 0; i < NUM_VALVES; i++){
-    if (valve[i].drink == d){
-      #ifdef DEBUG
-        Serial.println("DRINK "+String(d)+" FOUND IN VALVE "+String(i));
-      #endif
-      return i;
+    if (valve[i].active) {      
+      if (valve[i].drink == d){
+        #ifdef DEBUG
+          Serial.println("DRINK "+String(d)+" FOUND IN VALVE "+String(i));
+        #endif
+        return i;
+      }
     }
   }
 
@@ -1058,6 +1212,7 @@ bool cupPresent(){
 
 void make(int d[][2], int dim){
   int i, v_i;
+  Serial.println("ENTRO A MAKE");
   if (currentPos != 0) {
     #ifdef DEBUG 
       Serial.println("NOT AT HOME WHEN MAKE()");
@@ -1065,8 +1220,15 @@ void make(int d[][2], int dim){
       goHome();
   }
 
+  lcd_print2l("COLOQUE", "EL VASO!");
+  
   if (!cupPresent()){
     while (!cupPresent());
+  }
+
+  for (int z = 5; z > 0; z--){
+    lcd_print1p("COMENZANDO EN:", "00:0"+String(z));
+    delay(1000);
   }
 
   for (i = 0; i<dim; i++){
@@ -1093,7 +1255,7 @@ void make(int d[][2], int dim){
     while (cupPresent());
   }
 
-  lcd_printBreak("DISFRUTESU BEBIDA!",7);
+  lcd_print2l("DISFRUTE","SU BEBIDA!");
   delay(2500);
   
   #ifdef DEBUG
@@ -1123,25 +1285,34 @@ void goToSmooth(long pos){
   int dir = (steps >= 0)?1:-1;
   int stepGap;
   int i;
+  int c = 0;
   int N;
   float v,x,vmax;
   long stepsdone=0;
   
   steps = dir*steps; // valor absoluto
   N = floor(steps*0.05);  
-  stepGap=floor(N*0.025);
+  stepGap=floor(N*0.05);
   if (!stepGap) stepGap = 1;
   #ifdef DEBUG
     Serial.println("STEPS: "+String(steps)+"\nN: "+String(N)+"\nstepGap: "+String(stepGap));
   #endif
+
+  stepper.setSpeed(STP_MIN);
 
   for (i = 0; i < N; i+=stepGap)
   {
     v = (float)i / N;
     v=SMOOTHSTEP(v);
     x = (STP_MAX * v) + (STP_MIN * (1 - v)); //VELOCIDAD INICAL != 0
+    
     stepper.setSpeed(x);
-    lcd_printSpeed(x, STP_PULLEY*x*3.14/30);
+    
+    c++;
+    if ((c % 4)==0){
+      lcd_printSpeed(x, (STP_PULLEY*x*3.14)/30);
+      c=0;
+    }
     Serial.println("VEL "+String(x));
     if (i+stepGap<=N) {
       stepper.step(dir*stepGap);
@@ -1153,7 +1324,7 @@ void goToSmooth(long pos){
   }
   
   Serial.println("VEL MAX= "+String(x));
-  
+  lcd_printSpeed(x, (STP_PULLEY*x*3.14)/30);
   stepper.step(dir*(steps-2*stepsdone));
   stepsdone += steps-2*stepsdone;
   
@@ -1165,7 +1336,13 @@ void goToSmooth(long pos){
     v = SMOOTHSTEP(v);
     x = (STP_MIN * v) + (vmax * (1 - v));
     stepper.setSpeed(x);
-    lcd_printSpeed(x, STP_PULLEY*x*3.14/30);
+    
+    c++;
+    if ((c % 4)==0){
+      lcd_printSpeed(x, (STP_PULLEY*x*3.14)/30);
+      c=0;
+    }
+    
     Serial.println("VEL "+String(x));
     if (i+stepGap<=N) {
       stepper.step(dir*stepGap);
@@ -1183,7 +1360,7 @@ void goHome(){
   #ifdef DEBUG
     Serial.println(F("GOING HOME, WAITING FOR LIMIT SWITCH"));
   #endif
-
+  lcd_print("HOMING...");
   stepper.setSpeed(STP_HOMESPEED);
   while (digitalRead(PIN_FDC) == LOW){
     stepper.step(-1);
