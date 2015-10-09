@@ -1,3 +1,12 @@
+//TODO LIST:
+// + TEST ACC CURVE PARAMETERS IN REAL LIFE
+// + TEST AND DEBUG LCD MENU
+// + ADD A MASTER PRINT FUNCTION, lcd_master(byte index)
+//   EACH INDEX REPRESENTS ONE MESSAGE AND CAN BE STORED 
+//   INSIDE FLASH MEMORY VS SRAM WITH F() 
+// + LOAD MORE DRINKS AND MORE COCKTAILS
+// + TRY TO OPTIMIZE MEMORY USAGE
+
 //LIB INCLUDE
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
@@ -9,7 +18,7 @@
 
 //S-CURVE GENERATION
 #define SMOOTHSTEP(x) ((x) * (x) * (3 - 2 * (x))) // << SE PUEDE APLICAR VARIAS VECES SOBRE SI MISMA
-#define SMOOTHERSTEP(X) x*x*x*(x*(x*6 - 15) + 10) // << UN POCO MAS SUAVE QUE LA ANTERIOR
+#define SMOOTHERSTEP(x) x*x*x*(x*(x*6 - 15) + 10) // << UN POCO MAS SUAVE QUE LA ANTERIOR
 
 //VALVE RELATED VARIABLES
 #define PIN_V0 4 // PIN VALVULA 0
@@ -43,7 +52,7 @@
 #define STP_HOMESPEED 25
 #define STP_STEPS 200
 #define STP_MAXPOS 1000 // mm desde HOME
-#define STP_PULLEY 0.008 // Metros, para que v_lin = [m/s]. << si resulta muy chico pasar a cm, mm, um, pm, etc
+#define STP_PULLEY 0.08 // cm, para que v_lin = [cm/s]. << si resulta muy chico pasar a mm, um, pm, etc
 
 //LCD RELATED VARIABLES
 #define LCD_RS 46
@@ -53,11 +62,15 @@
 #define LCD_D6 42
 #define LCD_D7 44
 
+//ACCELERATION CURVE CONSTANTS
+#define ACC_N 0.15
+#define ACC_S 0.05
+
 //LIMIT SWITCH PIN
 #define PIN_FDC 2 //N(ormally)O(pen)
 
 //CUP SENSOR PIN
-#define CUP_SENSOR 16 // INTERNAL PULLUP, TIRAR A GND CUANDO HAY UN VASO
+#define CUP_SENSOR 24 // INTERNAL PULLUP, NORMALLY OPEN ,TIRAR A GND CUANDO HAY UN VASO
 
 //ANALOG VALUES OF EACH BUTTON
 #define A_default 1000
@@ -69,8 +82,8 @@
 
 //NUMBER OF...
 #define NUM_VALVES 8
-#define NUM_DRINKS 8
-#define NUM_PRESET 2
+#define NUM_DRINKS 10
+#define NUM_PRESET 6
 
 //LINEAR TRANSFORMATION VARIABLES
 #define CAUDAL 0.01
@@ -78,23 +91,27 @@
 
 //DRINK NAME DECLARATION. DEFINE EVERY POSIBLE DRINK HERE.
 //---------------------------------------------------------
-//  both arrays must be in the same order!
-//  alcoholic drinks should go first, then sodas and mixers
+//  * both arrays must be in the same order!
 //---------------------------------------------------------
-String bebidas_s[NUM_DRINKS] = {"FERNET", "VODKA","RON", "TEQUILA", "COCA COLA", "NARANJA", "GANCIA", "SPRITE"};
-enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA, GANCIA, SPRITE};
+String bebidas_s[NUM_DRINKS] = {"FERNET", "VODKA","RON", "TEQUILA", "COCA COLA", "NARANJA", "GANCIA", "SPRITE", "WHISKEY", "CAMPARI"};
+enum bebidas {FERNET = 0, VODKA, RON, TEQUILA, COCA_COLA, NARANJA, GANCIA, SPRITE, WHISKEY, CAMPARI};
 
 //PRE-CONFIGURED COCKTAILS GO HERE
 //---------------------------------------------------------
-//  this string holds the names shown in the lcd
-//  array with drink and % is made in menuPer().
+//  * this string holds the names shown in the lcd
+//  * array with drink and % is made in menuPer().
+//  * in_preset holds a pseudo truth table where each cocktail
+//  declares what drinks it needs
 //---------------------------------------------------------
-String bebidas_preset_s[NUM_PRESET] = {"FERNET-COLA", "DESTORNILLADOR"};
+String bebidas_preset_s[NUM_PRESET] = {"FERNET-COLA", "DESTORNILLADOR", "WHISK-COLA", "CUBA LIBRE", "CAMPARI C/NARJ", "GANCIA C/SPRITE"};
 
 byte in_preset [NUM_PRESET][NUM_DRINKS] {
-  // FERNE  VODKA   RON   TEQUILA   COCA COLA   NARANJA   GANCIA   SPRITE 
-   {1,     0,      0,    0,        1,          0,        0,       0      },
-   {0,     1,      0,    0,        0,          1,        0,       0      }
+   {1, 0, 0, 0, 1, 0, 0, 0, 0, 0}, //FERNET CON COCA
+   {0, 1, 0, 0, 0, 1, 0, 0, 0, 0}, //VODKA CN NARANJA
+   {0, 0, 0, 0, 1, 0, 0, 0, 1, 0}, //WHISKCOLA 
+   {0, 0, 1, 0, 1, 0, 0, 0, 0, 0}, //CUBA LIBRE
+   {0, 0, 0, 0, 0, 1, 0, 0, 0, 1}, //CAMPARI CON NARANJA
+   {0, 0, 0, 0, 0, 0, 1, 1, 0, 0} //GANCIA C/ SPRITE
 };
 
 
@@ -201,7 +218,7 @@ void lcd_printSpeed(float s1, float s2){
   lcd.setCursor(0,0);
   lcd.print(String(("%4.2f",s1)) + " RPM");
   lcd.setCursor(0,1);
-  lcd.print(String(("%4.2f",s2)) + " m/s");
+  lcd.print(String(("%4.2f",s2)) + " cm/s");
 }
 
 void lcd_print2l(String l1, String l2){
@@ -232,7 +249,7 @@ void menuPpal(){
   int li=-1;
   int b;
   int last=DEF;  
-  Serial.println("ENTRO A MENUPPAL");
+  Serial.println(F(">menuPpal"));
   do {
     b = readButtons();
     delay(5);
@@ -260,13 +277,11 @@ void menuPpal(){
     if (i>2) i = 0;
     if (i<0) i = 2;
     
-
-
     if (i != li){
       li = i;
       switch (i){
         case 0:
-          lcd_print2l("BEBIDAS","PRECONFIGURADAS");
+          lcd_print2l("BEBIDAS","PRE-CONFIGURADAS");
           break;  
         case 1:
           lcd_print2l("BEBIDA","PERSONALIZADA");
@@ -301,7 +316,7 @@ void menuTam(int next){
   int lj=-1;
   int b;
   int last=SELECT;  
-  Serial.println("ENTRO A MENUTAM");
+  Serial.println(F(">menuTam"));
 
   do {
     b = readButtons();
@@ -340,7 +355,6 @@ void menuTam(int next){
       lj = j;
       lcd_print2l("CAPACIDAD VASO:", String(j)+" ml");
     }  
-    Serial.println(b != SELECT);
   } while (b != SELECT);
 
   
@@ -372,7 +386,7 @@ void menuPre(int v){
   int last=SELECT;
   int canI = 0;
 
-  Serial.println("ENTRO A MENUPRE");
+  Serial.println(F(">menuPre"));
 
   for (int x = 0; x <NUM_PRESET; x++){
     if (canIDo(x)) {
@@ -397,12 +411,14 @@ void menuPre(int v){
           break;
           case IZQUIERDA:
           do {
-            j--;          
+            j--;
+            if (j < 0) break;        
           } while (canIDo(j)==0);
           break;
           case DERECHA:
           do {
-            j++;          
+            j++;       
+            if (j>=NUM_PRESET) break;   
           } while (canIDo(j)==0);
           break;
           case SELECT:
@@ -414,18 +430,27 @@ void menuPre(int v){
         b = DEF;
       }
   
-      if (j>=NUM_PRESET) j = 0;
-      if (j<0) j = NUM_PRESET - 1;
+      if (j>=NUM_PRESET) {
+        j = 0;
+        while (canIDo(j) == 0) j++;
+      }
+      if (j<0) {
+        j = NUM_PRESET - 1;
+        while (canIDo(j) == 0) j--;
+      }
       switch (j) { // POR SI QUIERO AGREGAR CONCENTRACIONES MAXIMAS Y MINIMAS.
         case 0: // FERNET
+        case 1: // DESTORNILLADOR
+        case 2:
+        case 3:
+        case 4:
+        case 5:
           if (p[j]<15) p[j]=15;
           if (p[j]>50) p[j]=50;
           break;
-        case 1: // DESTORNILLADOR
-          if (p[j]<15) p[j]=15;
-          if (p[j]>40) p[j]=40;
-          break;
         default:
+          if (p[j]<5) p[j]=5;
+          if (p[j]>95) p[j]=95;
         break;        
       }
   
@@ -433,12 +458,14 @@ void menuPre(int v){
         lj = j;
         lp[j] = p[j];
         switch (j) { // POR SI QUIERO AGREGAR CONCENTRACIONES MAXIMAS Y MINIMAS.
-        case 0: // FERNET
+        case 0: //FERNET
+        case 1: //DESTORNILLADOR
+        case 2: //WISK-COLA
+        case 3: //CUBA LIBRE
+        case 4: //CAMPARI
+        case 5: //GANCIA SPRITE
           lcd_print1p(bebidas_preset_s[j], String(p[j])+"% - "+String(100-p[j])+"%");
-          break;
-        case 1: // DESTORNILLADOR
-          lcd_print1p(bebidas_preset_s[j], String(p[j])+"% - "+String(100-p[j])+"%");
-          break;      
+          break; 
         default:
           lcd_print(bebidas_preset_s[j]); //en otro caso solo muestro el nombre;
           break;        
@@ -447,39 +474,66 @@ void menuPre(int v){
     } while (b != SELECT);
   
     while (readButtons());
-  
-    switch (j) {
-      int d[NUM_VALVES][2]; //DECLARO ACA EL MAXIMO DE BEBUDAS INDIVIDUALES Q PUEDE HABER
-      
+
+    int d[NUM_VALVES][2]; //DECLARO ACA EL MAXIMO DE BEBUDAS INDIVIDUALES Q PUEDE HABER
+    int cant = 0;
+
+
+    // DRINK MATRIX GENERATION
+    switch (j) {     
       case 0: //FERNET
+        cant = 2;
         d[0][0] = FERNET;
         d[1][0] = COCA_COLA;
         d[0][1] = floor((float)v*p[j]/100);
         d[1][1] = floor((float)v*(100 - p[j])/100);
-  
-        while (readButtons());
-        if (validateInput(v, d, 2)) {
-          make(d, 2);
-        } else {
-          lcd_printBreak("ERROR DECOMPOSICION",7);
-        }
         break;
       case 1: //DESTORNILLADOR
+        cant = 2;
         d[0][0] = VODKA;
         d[1][0] = NARANJA;
         d[0][1] = floor((float)v*p[j]/100);
         d[1][1] = floor((float)v*(100 - p[j])/100);
-        
-        
-        if (validateInput(v, d, 2)) {
-          lcd_print2l("HACIENDO","BEBIDA...");
-          make(d, 2);
-        } else {
-          lcd_print("ERROR");
-        }
         break;
+      case 2: //WHISKCOLA
+        cant = 2;
+        d[0][0] = WHISKEY;
+        d[1][0] = COCA_COLA;
+        d[0][1] = floor((float)v*p[j]/100);
+        d[1][1] = floor((float)v*(100 - p[j])/100);        
+        break;
+      case 3:
+        cant = 2;
+        d[0][0] = RON;
+        d[1][0] = COCA_COLA;
+        d[0][1] = floor((float)v*p[j]/100);
+        d[1][1] = floor((float)v*(100 - p[j])/100);    
+        break;
+      case 4:
+        cant = 2;
+        d[0][0] = CAMPARI;
+        d[1][0] = NARANJA;
+        d[0][1] = floor((float)v*p[j]/100);
+        d[1][1] = floor((float)v*(100 - p[j])/100);
+        break;   
+      case 5:
+        cant = 2;
+        d[0][0] = GANCIA;
+        d[1][0] = SPRITE;
+        d[0][1] = floor((float)v*p[j]/100);
+        d[1][1] = floor((float)v*(100 - p[j])/100);
+        break; 
       default:
         break;
+    }
+
+    //CASO GENERAL DE VALIDACIÓN Y LUEGO HAGO EL TRAGO
+    if (validateInput(v, d, cant)) {
+      lcd_print2l("HACIENDO","BEBIDA...");
+      make(d, cant);
+    } else {
+      lcd_print("ERROR");
+      delay(2500);
     }
   } else {
     lcd_print2l("BEBIDAS", "INSUFICIENTES");
@@ -496,21 +550,22 @@ void menuPer(int v){
   int b;
   int last=SELECT;
 
+  Serial.println(F(">menuPer"));
+
   for (int x = 0; x < NUM_VALVES; x++) {
     if (valve[x].active){
-      if (getValveIndexFromDrink(valve[x].drink) != -1){
+          j=x;
+          Serial.println(x);
           canI = 1;
           break;
       }
     }    
-  }
 
-  if (canI) { 
+  if (canI) {     
     do {
       b = readButtons();
       delay(10);
-      //Serial.println("j: "+String(j)+"\nb: "+String(b));
-  
+        
       if (b != last) {
         last = b;
         switch (b){
@@ -521,14 +576,18 @@ void menuPer(int v){
           porcentaje[j]+=5;
           break;
           case IZQUIERDA:
-          do {
+          while (valve[j].active == 0) {
             j--;
-          } while (getValveIndexFromDrink(valve[j].drink) == -1);
+            Serial.println(j);
+            if (j<0) break;
+          };
           break;
           case DERECHA:
-          do {
+          while (valve[j].active == 0) {
             j++;
-          } while (getValveIndexFromDrink(valve[j].drink) == -1);
+            Serial.println(j);
+            if (j>=NUM_VALVES) break;
+          };
           break;
           case SELECT:
           break;
@@ -543,11 +602,13 @@ void menuPer(int v){
       
       if (j>=NUM_VALVES) {
         j = 0;
-        while(getValveIndexFromDrink(valve[j].drink) == -1) j++;
+        Serial.println(j);
+        while(valve[j].active == 0) j++;
       }
       if (j<0) {
         j = NUM_VALVES -1;
-        while(getValveIndexFromDrink(valve[j].drink) == -1) j--;
+        Serial.println(j);
+        while(valve[j].active == 0) j--;
       }
       if (porcentaje[j] > 100) porcentaje[j] = 0;
       if (porcentaje[j]<0) porcentaje[j]=100;
@@ -591,6 +652,8 @@ void menuConf(){
   int lj=-1;
   int b;
   int last=SELECT;
+
+  Serial.println(F(">menuConf"));
 
   do {
     b = readButtons();
@@ -661,22 +724,24 @@ void menuSet(){
   int b;
   int last=SELECT;
 
+  Serial.println(F(">menuSet"));
+
   for (int x = 0; x < NUM_VALVES; x++){
     if (valve[x].active == 0) cerrados++;
   }
 
-  Serial.println(cerrados);
+  //Serial.println(cerrados);
   
 
   if (cerrados != 0){
 
-    while (valve[v].active) {
-      j++;
+    while (valve[v].active) { // me adelanto hasta la primera valvula cerrada
+      v++;
     }
   
     do {
       b = readButtons();
-      delay(5); // SI NO ANDA PROBAR CON 10
+      delay(5);
   
       if (b != last) {
         last = b;
@@ -684,11 +749,13 @@ void menuSet(){
           case ABAJO:
           do {
             v--;
+            if (v < 0) break;
           } while (valve[v].active);
           break;
           case ARRIBA:
           do {
             v++;
+            if (v>=NUM_VALVES) break;
           } while (valve[v].active);
           break;
           case IZQUIERDA:
@@ -707,18 +774,14 @@ void menuSet(){
       }
   
       if (j>=NUM_DRINKS) j = 0;
-      if (j<0) j = NUM_DRINKS;
+      if (j<0) j = NUM_DRINKS-1;
       if (v >= NUM_VALVES) {
-        v=-1;
-        do {
-            v++;
-        } while (valve[j].active);
+        v=0;
+        while(valve[v].active =0) v++;
       }
       if (v < 0) {
-        v=NUM_VALVES;
-        do {
-            v--;
-        } while (valve[j].active);
+        v=NUM_VALVES-1;
+        while (valve[v].active=0) v--;
       }
   
       if (j != lj || v != lv){
@@ -743,6 +806,8 @@ void menuClose(){
   int b;
   int last=SELECT;
   int abiertos = 0;
+
+  Serial.println(F("menuClose"));
   
   for (int x = 0; x < NUM_VALVES; x++){
     if (valve[x].active) abiertos++;
@@ -750,7 +815,7 @@ void menuClose(){
   
   if (abiertos) {
 
-    while (valve[j].active == 1) {
+    while (valve[j].active == 0) {
       j++;
     }
     
@@ -768,11 +833,13 @@ void menuClose(){
           case IZQUIERDA:
           do {
             j--;
+            if (j<0) break;
           } while (!(valve[j].active));
           break;
           case DERECHA:
           do {
             j++;
+            if (j>=NUM_DRINKS) break;
           } while (!(valve[j].active));
           break;
           case SELECT:
@@ -786,15 +853,12 @@ void menuClose(){
   
       if (j>= NUM_VALVES) {
         j = 0;
-        while (valve[j].active == 1) {
-          j++;
-        }
+        while (valve[j].active == 1) j++;
       }
+      
       if (j<0) {
         j = NUM_VALVES -1;
-        while (valve[j].active == 1) {
-          j--;
-        }
+        while (valve[j].active == 1) j++;
       }
   
       if (j != lj){
@@ -802,6 +866,7 @@ void menuClose(){
         lcd_print1p("CERRAR VALVULA:", String(j));
       }  
     } while (b != SELECT);
+    
     while (readButtons());
     closeValve(j);
   } else {
@@ -817,6 +882,8 @@ void menuDebug(){
   int last=SELECT;
   int arg[2] = {0};
   int larg[2] = {0};
+
+  Serial.println(">menuDebug");
 
   do {
     b = readButtons();
@@ -906,6 +973,7 @@ void posSetup(){
 }
 
 void pinSetup(){
+  //ELECTROVALVULAS
   pinMode(PIN_V0, OUTPUT);
   pinMode(PIN_V1, OUTPUT);
   pinMode(PIN_V2, OUTPUT);
@@ -914,11 +982,15 @@ void pinSetup(){
   pinMode(PIN_V5, OUTPUT);
   pinMode(PIN_V6, OUTPUT);
   pinMode(PIN_V7, OUTPUT);
-  pinMode(PIN_FDC, INPUT);
+
+  //STEPPER
   pinMode(STP1, OUTPUT);
   pinMode(STP2, OUTPUT);
   pinMode(STP3, OUTPUT);
   pinMode(STP4, OUTPUT);
+
+  //SENSORES
+  pinMode(PIN_FDC, INPUT);
   pinMode(CUP_SENSOR, INPUT_PULLUP);
 
   valve[0].pin = PIN_V0;
@@ -954,17 +1026,15 @@ void setUpValve (int index, int drinkCode){
   EEPROM.update(V0_EEPROM + index, 1);
   valve[index].drink = drinkCode;
   EEPROM.update(V0_EEPROM + NUM_VALVES + index, drinkCode);
-  #ifdef DEBUG
-    Serial.println("VALVE "+String(index)+" SET TO DRINK "+String(drinkCode));
-  #endif
+  
+  Serial.println("VALVE: "+String(index)+" -> DRINK: "+String(drinkCode)+ " (" + bebidas_s[valve[index].drink] + ")");
 }
 
 void closeValve (int index){
   valve[index].active = 0;
   EEPROM.update(V0_EEPROM + index, 0);
-  #ifdef DEBUG
-    Serial.println("VALVE "+String(index)+" NO LONGER AVAILABLE");
-  #endif
+  
+  Serial.println("VALVE: "+String(index)+" -> CLOSED");
 }
 
 int stringOcurr(String str, char subS){
@@ -998,7 +1068,7 @@ void parse(String str) {
 void readEEPROM(){
   int i;
   //#ifdef DEBUG
-    Serial.println(F("READING VALVE DATA FROM EEPROM."));
+    Serial.println(F("EEPROM -> READ"));
   //#endif
 
   if (EEPROM.read(254)==255) { 
@@ -1008,9 +1078,9 @@ void readEEPROM(){
       valve[i].active = EEPROM.read(V0_EEPROM +i);
       if (valve[i].active) {
         valve[i].drink = EEPROM.read(V0_EEPROM + NUM_VALVES + i);
-        #ifdef DEBUG
-          Serial.println("VALVE "+ String(i)+" ACTIVE WITH DRINK "+ String(valve[i].drink));
-        #endif
+        //#ifdef DEBUG
+          Serial.println("VALVE: "+ String(i)+" -> DRINK: "+ String(valve[i].drink)+" (" + bebidas_s[valve[i].drink] + ")");
+        //#endif
       }
     }
   }
@@ -1147,18 +1217,18 @@ boolean validateInput(int v,int d[][2], int dim){
 
   for (i = 0; i<dim; i++){
     if (getValveIndexFromDrink(d[i][0])== -1){ //si no esta disponible la bebida, tiro error
-      #ifdef DEBUG
-        Serial.println(F("VALIDATION NOT OK"));
-      #endif
+      //#ifdef DEBUG
+        Serial.println(F("VALIDATION -> FAIL"));
+      //#endif
       return 0;
     }
     porcentajeSum += d[i][1];
   }
 
-  #ifdef DEBUG
-    Serial.print("VALIDATION ");
-    Serial.println((porcentajeSum <= v)?"OK":"NOT OK");
-  #endif
+  //#ifdef DEBUG
+    Serial.print("VALIDATION ->");
+    Serial.println((porcentajeSum <= v)?"PASS":"FAIL");
+  //#endif
   
   return (porcentajeSum <= v);  
 }
@@ -1212,7 +1282,7 @@ bool cupPresent(){
 
 void make(int d[][2], int dim){
   int i, v_i;
-  Serial.println("ENTRO A MAKE");
+  Serial.println(">make");
   if (currentPos != 0) {
     #ifdef DEBUG 
       Serial.println("NOT AT HOME WHEN MAKE()");
@@ -1245,7 +1315,6 @@ void make(int d[][2], int dim){
       pour(valve[v_i].pin, d[i][1]);
   }
 
-  //TODO: revolver bebida ;) ;)
   if (currentPos>10) goToSmooth(10);
   goHome();
 
@@ -1291,8 +1360,8 @@ void goToSmooth(long pos){
   long stepsdone=0;
   
   steps = dir*steps; // valor absoluto
-  N = floor(steps*0.05);  
-  stepGap=floor(N*0.05);
+  N = floor(steps*ACC_N);  
+  stepGap=floor(N*ACC_S);
   if (!stepGap) stepGap = 1;
   #ifdef DEBUG
     Serial.println("STEPS: "+String(steps)+"\nN: "+String(N)+"\nstepGap: "+String(stepGap));
@@ -1313,7 +1382,7 @@ void goToSmooth(long pos){
       lcd_printSpeed(x, (STP_PULLEY*x*3.14)/30);
       c=0;
     }
-    Serial.println("VEL "+String(x));
+    Serial.println(String(x));
     if (i+stepGap<=N) {
       stepper.step(dir*stepGap);
       stepsdone += stepGap;
@@ -1323,7 +1392,7 @@ void goToSmooth(long pos){
     }
   }
   
-  Serial.println("VEL MAX= "+String(x));
+  Serial.println(String(x));
   lcd_printSpeed(x, (STP_PULLEY*x*3.14)/30);
   stepper.step(dir*(steps-2*stepsdone));
   stepsdone += steps-2*stepsdone;
@@ -1343,7 +1412,7 @@ void goToSmooth(long pos){
       c=0;
     }
     
-    Serial.println("VEL "+String(x));
+    Serial.println(String(x));
     if (i+stepGap<=N) {
       stepper.step(dir*stepGap);
       stepsdone += stepGap;
@@ -1352,7 +1421,7 @@ void goToSmooth(long pos){
       stepsdone += ((i+stepGap)-N);
     }
   }
-  Serial.println("VEL FINAL= "+String(x)+"\nSTEPSCOMPUTADOS: "+String(stepsdone));
+  Serial.println("STEPSCOMPUTADOS: "+String(stepsdone));
   currentPos=pos;
 }
 
@@ -1360,7 +1429,7 @@ void goHome(){
   #ifdef DEBUG
     Serial.println(F("GOING HOME, WAITING FOR LIMIT SWITCH"));
   #endif
-  lcd_print("HOMING...");
+  //lcd_print("Final de carrera");
   stepper.setSpeed(STP_HOMESPEED);
   while (digitalRead(PIN_FDC) == LOW){
     stepper.step(-1);
