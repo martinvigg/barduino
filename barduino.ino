@@ -234,7 +234,7 @@ byte canIDo(byte index){
   for (i = 0; i<NUM_DRINKS; i++){
     Serial.println(i);
     if (in_preset[index][i]){
-      if (getValveIndexFromDrink(4)== -1){
+      if (getValveIndexFromDrink(i)== -1){
         Serial.println("NO PUEDO HACER");
         return 0;
       }
@@ -576,18 +576,16 @@ void menuPer(int v){
           porcentaje[j]+=5;
           break;
           case IZQUIERDA:
-          while (valve[j].active == 0) {
+          do {
             j--;
-            Serial.println(j);
-            if (j<0) break;
-          };
+            if (j < 0) break;
+          } while (valve[j].active == 0);
           break;
           case DERECHA:
-          while (valve[j].active == 0) {
+          do {
             j++;
-            Serial.println(j);
-            if (j>=NUM_VALVES) break;
-          };
+            if (j >= NUM_VALVES) break;
+          } while (valve[j].active == 0);
           break;
           case SELECT:
           break;
@@ -602,12 +600,10 @@ void menuPer(int v){
       
       if (j>=NUM_VALVES) {
         j = 0;
-        Serial.println(j);
         while(valve[j].active == 0) j++;
       }
       if (j<0) {
         j = NUM_VALVES -1;
-        Serial.println(j);
         while(valve[j].active == 0) j--;
       }
       if (porcentaje[j] > 100) porcentaje[j] = 0;
@@ -777,11 +773,11 @@ void menuSet(){
       if (j<0) j = NUM_DRINKS-1;
       if (v >= NUM_VALVES) {
         v=0;
-        while(valve[v].active =0) v++;
+        while(valve[v].active == 1) v++;
       }
       if (v < 0) {
         v=NUM_VALVES-1;
-        while (valve[v].active=0) v--;
+        while (valve[v].active == 1) v--;
       }
   
       if (j != lj || v != lv){
@@ -853,12 +849,12 @@ void menuClose(){
   
       if (j>= NUM_VALVES) {
         j = 0;
-        while (valve[j].active == 1) j++;
+        while (valve[j].active == 0) j++;
       }
       
       if (j<0) {
         j = NUM_VALVES -1;
-        while (valve[j].active == 1) j++;
+        while (valve[j].active == 0) j--;
       }
   
       if (j != lj){
