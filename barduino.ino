@@ -48,11 +48,11 @@
 #define STP4 12
 #define STP_MAX 200
 #define STP_MIN 10
-#define STP_DEFAULTSPEED 75
+#define STP_DEFAULTSPEED 50
 #define STP_HOMESPEED 25
 #define STP_STEPS 200
 #define STP_MAXPOS 1000 // mm desde HOME
-#define STP_PULLEY 0.08 // cm, para que v_lin = [cm/s]. << si resulta muy chico pasar a mm, um, pm, etc
+#define STP_PULLEY 0.05 // cm, para que v_lin = [cm/s]. << si resulta muy chico pasar a mm, um, pm, etc
 
 //LCD RELATED VARIABLES
 #define LCD_RS 46
@@ -986,7 +986,7 @@ void pinSetup(){
   pinMode(STP4, OUTPUT);
 
   //SENSORES
-  pinMode(PIN_FDC, INPUT);
+  pinMode(PIN_FDC, INPUT_PULLUP);
   pinMode(CUP_SENSOR, INPUT_PULLUP);
 
   valve[0].pin = PIN_V0;
@@ -1426,8 +1426,8 @@ void goHome(){
     Serial.println(F("GOING HOME, WAITING FOR LIMIT SWITCH"));
   #endif
   //lcd_print("Final de carrera");
-  stepper.setSpeed(STP_HOMESPEED);
-  while (digitalRead(PIN_FDC) == LOW){
+  stepper.setSpeed(STP_DEFAULTSPEED);
+  while (digitalRead(PIN_FDC) == HIGH){
     stepper.step(-1);
   }
   currentPos = 0;
