@@ -38,8 +38,8 @@
 #define POS_V3 400
 #define POS_V4 500
 #define POS_V5 600
-#define POS_V6 700
-#define POS_V7 800
+#define POS_V6 650
+#define POS_V7 699
 
 #define V0_EEPROM 10
 
@@ -49,11 +49,11 @@
 #define STP3 11
 #define STP4 12
 #define STP_MAX 200
-#define STP_MIN 10
-#define STP_DEFAULTSPEED 50
-#define STP_HOMESPEED 25
+#define STP_MIN 30
+#define STP_DEFAULTSPEED 30
+#define STP_HOMESPEED 30
 #define STP_STEPS 200
-#define STP_MAXPOS 1000 // mm desde HOME
+#define STP_MAXPOS 700 // mm desde HOME
 #define STP_PULLEY 0.05 // cm, para que v_lin = [cm/s]. << si resulta muy chico pasar a mm, um, pm, etc
 
 //LCD RELATED VARIABLES
@@ -65,7 +65,7 @@
 #define LCD_D7 44
 
 //ACCELERATION CURVE CONSTANTS
-#define ACC_N 0.15
+#define ACC_N 0.075
 #define ACC_S 0.05
 
 //LIMIT SWITCH PIN
@@ -89,7 +89,7 @@
 
 //LINEAR TRANSFORMATION VARIABLES
 #define CAUDAL 0.008
-#define STEPS_X_MM 5 //STEPS X MILIMETRO // POLEA:STEPS 20:5 16:6.25
+#define STEPS_X_MM 10 //STEPS X MILIMETRO // POLEA:STEPS 20:5 16:6.25
 
 //DRINK NAME DECLARATION. DEFINE EVERY POSIBLE DRINK HERE.
 //---------------------------------------------------------
@@ -944,7 +944,7 @@ void menuDebug(){
           goToSmooth(arg[1]);
           break;
         case 2:
-          goHome();
+          //goHome();
           break;
       }
 }
@@ -1356,7 +1356,7 @@ void goToSmooth(long pos){
   int N;
   float v,x,vmax;
   long stepsdone=0;
-  
+ 
   steps = dir*steps; // valor absoluto
   N = floor(steps*ACC_N);  
   stepGap=floor(N*ACC_S);
@@ -1377,7 +1377,7 @@ void goToSmooth(long pos){
     
     c++;
     if ((c % 4)==0){
-      lcd_printSpeed(x, (STP_PULLEY*x*3.14)/30);
+      //lcd_printSpeed(x, (STP_PULLEY*x*3.14)/30);
       c=0;
     }
     Serial.println(String(x));
@@ -1406,7 +1406,7 @@ void goToSmooth(long pos){
     
     c++;
     if ((c % 4)==0){
-      lcd_printSpeed(x, (STP_PULLEY*x*3.14)/30);
+      //lcd_printSpeed(x, (STP_PULLEY*x*3.14)/30);
       c=0;
     }
     
