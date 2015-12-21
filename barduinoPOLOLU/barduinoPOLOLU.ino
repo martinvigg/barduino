@@ -17,7 +17,7 @@
 //DEBUG DEFINITIONS
 #define DEBUG //SHOW TONS OF DEBUG MESSAGES VIA SERIAL
 #define ACCEL //USE GOTOSMOOTH INSTEAD OF GOTO
-//#define LCD
+#define LCD
 
 //S-CURVE GENERATION
 #define SMOOTHSTEP(x) ((x) * (x) * (3 - 2 * (x))) // << SE PUEDE APLICAR VARIAS VECES SOBRE SI MISMA
@@ -45,15 +45,15 @@
 #define V0_EEPROM 10
 
 //STEPPER RELATED VARIABLES
-#define STP_STEP 13 // PINES DEL MOTOR PAP
-#define STP_DIR 12
-#define STP_ENA 11
-#define STP_MODE 1 //1 = FULL STEP, 2 = HALF-STEP, 4 = 1/4 STEP, 8 = 1/8 STEP
-#define STP_ACC 300 //STEPS/SEG/seg
-#define STP_MAX 1000 //STEPS/SEG
-#define STP_MIN 50 //
+#define STP_STEP 33 // PINES DEL MOTOR PAP
+#define STP_DIR 35
+#define STP_ENA 31
+#define STP_MODE 2 //1 = FULL STEP, 2 = HALF-STEP, 4 = 1/4 STEP, 8 = 1/8 STEP
+#define STP_ACC 7500 //STEPS/SEG/seg
+#define STP_MAX 15000 //STEPS/SEG
+#define STP_MIN 150 //
 #define STP_DEFAULTSPEED 30 //RPM
-#define STP_HOMESPEED 30 //RPM
+#define STP_HOME 30 //
 #define STP_STEPS 200 //RPM
 #define STP_MAXPOS 700 // mm desde HOME
 #define STP_PULLEY 0.05 // cm, para que v_lin = [cm/s]. << si resulta muy chico pasar a mm, um, pm, etc
@@ -71,10 +71,10 @@
 #define ACC_S 0.05
 
 //LIMIT SWITCH PIN
-#define PIN_FDC 2 //N(ormally)O(pen)
+#define PIN_FDC 52 //N(ormally)O(pen)
 
 //CUP SENSOR PIN
-#define CUP_SENSOR 52 // INTERNAL PULLUP, NORMALLY OPEN ,TIRAR A GND CUANDO HAY UN VASO
+#define CUP_SENSOR 50 // INTERNAL PULLUP, NORMALLY OPEN ,TIRAR A GND CUANDO HAY UN VASO
 
 //ANALOG VALUES OF EACH BUTTON
 #define A_default 1000
@@ -90,7 +90,7 @@
 #define NUM_PRESET 6
 
 //LINEAR TRANSFORMATION VARIABLES
-#define CAUDAL 0.008
+#define CAUDAL 2//0.008
 #define STEPS_X_MM 10 //STEPS X MILIMETRO // POLEA:STEPS 20:5 16:6.25
 
 //DRINK NAME DECLARATION. DEFINE EVERY POSIBLE DRINK HERE.
@@ -169,9 +169,8 @@ void loop() {
 
 int readButtons(){
   byte i = 0;
-  int analog = analogRead(A0);
+  int analog = analogRead(A0);;
   int error = 50;
-  delay(5);
 
   if (analog > (A_default - error)) return DEF;
   if (analog < (A_right + error))   return DERECHA;
@@ -1341,9 +1340,11 @@ void make(int d[][2], int dim){
 
 long distanceToSteps(long pos) {
   #ifdef DEBUG
-    Serial.println("DISTANCE: "+String(pos)+" -> STEPS: "+String(round(pos*STEPS_X_MM)));
+    Serial.println("DISTANCE: "+String(pos)+" -> STEPS: "+String(round(pos*STEPS_X_MM*STP_MODE)));
   #endif
-  return round(pos*STEPS_X_MM);
+  int j= pos*STEPS_X_MM;
+  j *=STP_MODE;
+  return round(j);
 }
 
 void goTo(long pos){
@@ -1446,34 +1447,39 @@ void goToSmooth1(long pos){
 }
 
 void goToSmooth(long pos){
-  long steps = distanceToSteps(pos - currentPos)*STP_MODE;
+  long steps = distanceToSteps(pos - currentPos);
   int dir = (steps >= 0)?1:0;  
-  int i;
+  unsigned long i;
+  int modo = 1;
   long stepsdone=0;
   //Nuevo
-  int stepsToVLim;
+  unsigned long stepsToVLim;
   double v_min,v_max, tt=0;
-  float p,p_0, p_max;
+  double p,p_0, p_max;
   unsigned long thelp, tiempo;
+  //Serial.println("CERO");
 
   digitalWrite(STP_ENA, LOW);
   
   steps = abs(steps); // valor absoluto  
   //v_min = STP_MIN*(STP_STEPS/60.0);
   //v_max = STP_MAX*(STP_STEPS/60.0);
-  v_min = STP_MIN*STP_MODE;
-  v_max = STP_MAX*STP_MODE;
+  v_min = STP_MIN*modo;
+  v_max = STP_MAX*modo;
   stepsToVLim=ceil((v_max*v_max-v_min*v_min)/(2*STP_ACC));
-  
-  if (steps<(2*stepsToVLim)) {
-    v_max = sqrt(2* STP_ACC *(steps/2.2)+v_min*v_min); //VOY HASTA UN POCO MAS LENTO DE LO MAXIMO QUE PUEDO IR, POR LAS DUDAS.
+  Serial.println(String(steps)+" vs "+String(stepsToVLim*2));
+  Serial.println(String(stepsToVLim));
+  if (steps<(stepsToVLim*2)) {
+    v_max = sqrt(2* STP_ACC *(steps/2.1)+v_min*v_min); //VOY HASTA UN POCO MAS LENTO DE LO MAXIMO QUE PUEDO IR, POR LAS DUDAS.
     stepsToVLim=ceil((v_max*v_max-v_min*v_min)/(2*STP_ACC));
   }
 
   digitalWrite(STP_DIR, (dir)?HIGH:LOW);
   Serial.println("DIR SET TO "+ String((dir)?HIGH:LOW));
 
-  p_0 = 1/sqrt(v_min+v_min+2*STP_ACC);
+  p_0 = 1/sqrt(v_min*v_min+2*STP_ACC);
+  //p_0 = 1/(v_min);
+  
   p=p_0;
   p_max=1/v_max;
 
@@ -1490,6 +1496,8 @@ void goToSmooth(long pos){
     if (i != 1) {      
       if (i<stepsToVLim){
         p = p*(1-STP_ACC*p*p+1.5*STP_ACC*STP_ACC*p*p*p*p);
+      } else if (i == stepsToVLim || i == (steps-stepsToVLim)){
+        Serial.println("MAXXXXX");
       } else if (i>(steps-stepsToVLim)){
         p = p*(1+STP_ACC*p*p+1.5*STP_ACC*STP_ACC*p*p*p*p);
       }
@@ -1500,25 +1508,26 @@ void goToSmooth(long pos){
     if (p>p_0) p = p_0; //Si el delay es mas lento que el delay de v_max.
     stepDelay(p, micros()-thelp);
   }
-  
+  digitalWrite(STP_ENA, HIGH );
   tiempo=millis()-tiempo;
   Serial.println("TIEMPO: (MS): "+String(tiempo));
   currentPos=pos;
 }
 
 void goHome(){
-  float p = 1/(STP_MIN*STP_STEPS/60.0);
+  float p = 1.0/(STP_HOME*STP_HOME);
   long tiempo;
   
   #ifdef DEBUG
     Serial.println(F("GOING HOME, WAITING FOR LIMIT SWITCH"));    
   #endif
+  Serial.println(p,DEC);
   digitalWrite(STP_DIR, LOW);
   digitalWrite(STP_ENA, LOW);
   Serial.println("DIR SET TO LOW");
   while (digitalRead(PIN_FDC) == HIGH){
     tiempo = millis();
-    stepPulse(STP_STEP, 500);
+    stepPulse(STP_STEP, 300);
     stepDelay(p, millis()-tiempo);
   }
   currentPos = 0;
